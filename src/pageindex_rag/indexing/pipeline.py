@@ -1,0 +1,141 @@
+"""Indexing in two stages, so a visitor can see the cost before any LLM call is made.
+
+build_index: extract, build the tree, split large nodes, save images. No LLM, no cost.
+enrich_index: image descriptions and section summaries. These are the LLM calls.
+"""
+
+import hashlib
+import re
+import threading
+from collections.abc import Callable
+from pathlib import Path
+
+from ..config import Settings
+from ..models import DocumentIndex, FileKind, ImageRecord, TocEntry
+from ..storage import Store
+from .blocks import IMAGE_REF, Block, Heading
+from .docx_extract import extract_docx
+from .estimate import estimate_index
+from .markdown_extract import extract_markdown
+from .split import split_large_nodes
+from .tree import build_tree
+
+OnProgress = Callable[[int, int, str], None]  # done, total, what just finished
+
+_MIME_TYPES = {
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "gif": "image/gif",
+    "webp": "image/webp",
+    "emf": "image/emf",
+    "wmf": "image/wmf",
+}
+
+
+def build_index(path: Path | str, store: Store, settings: Settings) -> DocumentIndex:
+    """Extract structure and content. Images are written to the store; nothing is saved as an index yet."""
+    path = Path(path)
+    kind, blocks = _extract(path)
+    doc_id = make_doc_id(path)
+
+    root, raw_images = build_tree(blocks, title=path.stem, kind=kind)
+    source_toc = [TocEntry(title=b.title, level=b.level) for b in blocks if isinstance(b, Heading)] or None
+    split_large_nodes(root, settings.max_leaf_tokens)
+
+    images = [
+        ImageRecord(
+            id=image_id,
+            file=store.save_image(doc_id, image_id, image.data, image.ext),
+            mime=_MIME_TYPES.get(image.ext, f"image/{image.ext}"),
+            description=image.alt,
+        )
+        for image_id, image in raw_images
+    ]
+    index = DocumentIndex(
+        doc_id=doc_id,
+        title=path.stem,
+        source_path=path.name,
+        kind=kind,
+        source_toc=source_toc,
+        root=root,
+        images=images,
+    )
+    _assign_image_nodes(index)
+    return index
+
+
+def enrich_index(
+    index: DocumentIndex,
+    store: Store,
+    settings: Settings,
+    api_key: str | None = None,
+    on_progress: OnProgress | None = None,
+) -> None:
+    """Describe images and summarize every section, in place. Raises if an LLM call fails."""
+    from ..llm import chat_model
+    from .summarize import describe_images, summarize_tree
+
+    total = estimate_index(index, store).calls
+    done = 0
+    lock = threading.Lock()  # steps finish on worker threads
+
+    def on_step(label: str) -> None:
+        nonlocal done
+        with lock:
+            done += 1
+            if on_progress:
+                on_progress(done, total, label)
+
+    describe_images(
+        index.images,
+        store.doc_dir(index.doc_id),
+        chat_model(settings.vision_model, api_key),
+        settings.index_workers,
+        on_step,
+    )
+    summarize_tree(index.root, chat_model(settings.index_model, api_key), index.images, settings.index_workers, on_step)
+    index.summary = index.root.summary
+
+
+def index_document(
+    path: Path | str,
+    store: Store,
+    settings: Settings,
+    use_llm: bool = True,
+    api_key: str | None = None,
+    on_progress: OnProgress | None = None,
+) -> DocumentIndex:
+    """Index one file and save it. With use_llm=False, no summaries or image descriptions are made."""
+    index = build_index(path, store, settings)
+    if use_llm:
+        enrich_index(index, store, settings, api_key, on_progress)
+    store.save_index(index)
+    return index
+
+
+def make_doc_id(path: Path) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", path.stem.lower()).strip("-")[:60] or "doc"
+    digest = hashlib.sha1(path.read_bytes()).hexdigest()[:8]
+    return f"{slug}-{digest}"
+
+
+def _extract(path: Path) -> tuple[FileKind, list[Block]]:
+    suffix = path.suffix.lower()
+    if suffix == ".docx":
+        return "docx", extract_docx(path)
+    if suffix in (".md", ".markdown"):
+        return "markdown", extract_markdown(path)
+    if suffix == ".pdf":
+        raise NotImplementedError("PDF support is stage 3 (see DESIGN.md).")
+    raise ValueError(f"Unsupported file type: {suffix}")
+
+
+def _assign_image_nodes(index: DocumentIndex) -> None:
+    """Point each image at the node whose text holds its placeholder (after splitting)."""
+    records = {record.id: record for record in index.images}
+    for node in index.root.walk():
+        for image_id in IMAGE_REF.findall(node.text):
+            if image_id in records:
+                records[image_id].node_id = node.id
+                records[image_id].location = node.location

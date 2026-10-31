@@ -1,0 +1,32 @@
+"""PageIndex RAG: chat with documents by navigating their table of contents."""
+
+import asyncio
+import logging
+
+import reflex as rx
+
+from .files import api
+from .runtime import sessions
+from .state import State
+from .views import index
+
+log = logging.getLogger(__name__)
+SWEEP_EVERY_SECONDS = 300
+
+app = rx.App(api_transformer=api, stylesheets=["/app.css"])
+app.add_page(index, route="/", title="PageIndex RAG", on_load=State.on_load)
+
+
+async def sweep_expired_sessions() -> None:
+    """Delete session folders past their lifetime. This is what guarantees cleanup."""
+    while True:
+        try:
+            removed = await asyncio.to_thread(sessions.sweep)
+            if removed:
+                log.info("Removed %d expired session(s)", removed)
+        except Exception:
+            log.exception("Session sweep failed")
+        await asyncio.sleep(SWEEP_EVERY_SECONDS)
+
+
+app.register_lifespan_task(sweep_expired_sessions)

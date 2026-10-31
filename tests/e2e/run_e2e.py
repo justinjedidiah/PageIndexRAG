@@ -1,0 +1,289 @@
+"""End-to-end check of the web app in a real Chrome, using the offline fake model (no API key).
+
+    .venv/Scripts/python tests/e2e/run_e2e.py [output_dir]
+
+Starts `reflex run` with a temporary data folder, builds a fake-summarised sample library,
+drives the page like a visitor, and writes screenshots to output_dir. Needs Google Chrome
+installed and the dev extras (playwright). Not collected by pytest: it is slow and starts servers.
+"""
+
+import contextlib
+import io
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.request
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+import psutil  # noqa: E402
+from docx import Document  # noqa: E402
+from playwright.sync_api import expect, sync_playwright  # noqa: E402
+
+from tests.conftest import make_noisy_png  # noqa: E402
+
+FRONTEND, BACKEND = "http://localhost:3000", "http://localhost:8000"
+KEY = "sk-ant-e2e-secret-key-do-not-store-123"
+results: list[tuple[str, bool, str]] = []
+
+
+def wait_for(url: str, seconds: int) -> bool:
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        with contextlib.suppress(Exception):
+            if urllib.request.urlopen(url, timeout=2).status < 500:
+                return True
+        time.sleep(1.5)
+    return False
+
+
+def kill_tree(process: subprocess.Popen) -> None:
+    with contextlib.suppress(Exception):
+        parent = psutil.Process(process.pid)
+        for child in parent.children(recursive=True):
+            with contextlib.suppress(Exception):
+                child.kill()
+        parent.kill()
+
+
+def make_user_docx(path: Path) -> None:
+    doc = Document()
+    doc.add_heading("Pelican Care Guide", level=0)
+    doc.add_heading("Feeding", level=1)
+    doc.add_paragraph("Pelicans eat about one kilogram of fish every day. Offer fresh herring in the morning.")
+    doc.add_heading("Habitat", level=1)
+    doc.add_paragraph("A pelican needs a shallow pool at least two meters across and a sunny resting platform.")
+    table = doc.add_table(rows=2, cols=2, style="Table Grid")
+    table.rows[0].cells[0].text, table.rows[0].cells[1].text = "Item", "Size"
+    table.rows[1].cells[0].text, table.rows[1].cells[1].text = "Pool", "2 m"
+    doc.add_picture(io.BytesIO(make_noisy_png(120, 120)))
+    doc.save(path)
+
+
+def main() -> int:
+    out = Path(sys.argv[1] if len(sys.argv) > 1 else tempfile.mkdtemp(prefix="e2e-shots-"))
+    out.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix="pageindex-e2e-"))
+    data, samples = work / "data", work / "samples"
+    env = {
+        **os.environ,
+        "PYTHONPATH": str(ROOT),
+        "PYTHONUNBUFFERED": "1",
+        "PAGEINDEX_LLM_FACTORY": "tests.fake_llm:make_model",
+        "PAGEINDEX_DATA_DIR": str(data),
+        "PAGEINDEX_SAMPLES_DIR": str(samples),
+    }
+    env.pop("ANTHROPIC_API_KEY", None)
+
+    subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "build_samples.py"), "--index", "--out", str(samples)],
+        env=env, cwd=ROOT, check=True, capture_output=True,
+    )
+    log_path = out / "server.log"
+    with log_path.open("wb") as log:
+        server = subprocess.Popen([sys.executable, "-m", "reflex", "run"], cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
+    try:
+        if not (wait_for(f"{BACKEND}/ping", 240) and wait_for(FRONTEND, 240)):
+            print("Server did not start. See", log_path)
+            return 2
+        run_browser(out, data, work)
+    finally:
+        kill_tree(server)
+        shutil.rmtree(work, ignore_errors=True)
+
+    print()
+    for name, ok, detail in results:
+        print(("PASS  " if ok else "FAIL  ") + name + (f"  [{detail}]" if detail and not ok else ""))
+    failed = [r for r in results if not r[1]]
+    print(f"\n{len(results) - len(failed)}/{len(results)} checks passed. Screenshots and server log: {out}")
+    return 1 if failed else 0
+
+
+def run_browser(out: Path, data: Path, work: Path) -> None:
+    with sync_playwright() as p:
+        browser = p.chromium.launch(channel="chrome", headless=True)
+        # Warm-up: the first load of a fresh dev server makes Vite optimize dependencies and hot-swap
+        # modules, which can log framework warnings that are not about the app. Load once, let it settle.
+        warmup = browser.new_page()
+        warmup.goto(FRONTEND, wait_until="networkidle", timeout=120000)
+        warmup.wait_for_timeout(5000)
+        warmup.close()
+
+        page = browser.new_page(viewport={"width": 1280, "height": 860})
+        problems: list[str] = []
+        current = ["page load"]
+        page.on("pageerror", lambda e: problems.append(f"[{current[0]}] pageerror: {e}"))
+        page.on("console", lambda m: problems.append(f"[{current[0]}] console: {m.text}") if m.type == "error" else None)
+
+        def step(name: str, fn, shot: str | None = None) -> None:
+            current[0] = name
+            try:
+                fn()
+                results.append((name, True, ""))
+            except Exception as exc:
+                results.append((name, False, str(exc).splitlines()[0][:200]))
+                page.screenshot(path=str(out / f"FAIL-{name[:30].replace(' ', '_')}.png"))
+            if shot:
+                page.screenshot(path=str(out / shot))
+
+        def dismiss_dialog() -> None:
+            """Close the source panel (a section opened from the outline sits on top of it)."""
+            close = page.locator("#source-panel button[title='Close panel']")
+            seen = []
+            for _ in range(4):
+                if close.count() == 0:
+                    return
+                seen.append(f"{close.count()}:{page.locator('#source-panel').inner_text()[:15]!r}")
+                close.first.click()
+                page.wait_for_timeout(1500)
+            panel_text = page.locator("#source-panel").inner_text()[:200]
+            assert close.count() == 0, "panel still open: " + repr(panel_text) + " " + " ".join(seen) + " " + "; ".join(problems[-3:])
+
+        page.goto(FRONTEND, wait_until="networkidle", timeout=90000)
+
+        def loads() -> None:
+            expect(page.get_by_text("PageIndex RAG").first).to_be_visible(timeout=30000)
+            expect(page.get_by_text("sample", exact=True)).to_have_count(3, timeout=15000)
+            expect(page.get_by_placeholder("Add your API key to chat")).to_be_disabled()
+
+        step("page loads with 3 sample documents and chat locked", loads, "01-loaded.png")
+
+        def browse_sample() -> None:
+            page.get_by_role("button", name="Browse").nth(1).click()  # samples are sorted by title: the second is Meridian
+            outline = page.locator("#source-panel")
+            expect(outline.get_by_text("Outline", exact=True)).to_be_visible(timeout=10000)
+            outline.get_by_role("button").filter(has=page.get_by_text("Roster", exact=True)).click()
+            expect(page.get_by_text("Ada Okonkwo").first).to_be_visible(timeout=10000)
+
+        step("browse a sample outline and read a section without a key", browse_sample, "02-browse.png")
+        step("dialogs close", dismiss_dialog)
+
+        def locked_upload() -> None:
+            expect(page.get_by_role("button", name="Upload")).to_be_disabled()
+
+        step("upload is locked until a key is set", locked_upload)
+
+        def enter_key() -> None:
+            page.get_by_placeholder("sk-ant-...").fill(KEY)
+            page.get_by_role("button", name="Use", exact=True).click()
+            expect(page.get_by_text("Key set")).to_be_visible(timeout=20000)
+            expect(page.get_by_placeholder("Ask a question about the documents")).to_be_enabled()
+
+        step("a key is accepted and unlocks chat", enter_key, "03-key.png")
+
+        def key_not_in_page() -> None:
+            assert KEY not in page.content(), "key present in the page HTML"
+            assert KEY not in page.inner_text("body"), "key present in page text"
+
+        step("the key never appears in the page", key_not_in_page)
+
+        def ask_text() -> None:
+            page.get_by_role("button", name="Who is the commander").click()
+            expect(page.get_by_text("Next: open document.")).to_be_visible(timeout=60000)  # the model's note before its first step
+            expect(page.get_by_text("Answered by the offline test model")).to_be_visible(timeout=60000)
+
+        step("a question streams its path and answers", ask_text, "04-answer.png")
+
+        def path_and_citation() -> None:
+            body = page.inner_text("body")
+            assert 'Opened "Meridian' in body or "Opened" in body, "no 'Opened' step shown"
+            assert "Read " in body, "no 'Read' step shown"
+            assert "Next: " in body, "the model's note before a step is not shown beside it"
+        step("navigation steps are shown", path_and_citation)
+
+        def open_citation() -> None:
+            chips = page.locator("button[title]", has=page.locator("svg"))  # citation chips carry the document title
+            expect(chips.first).to_be_visible(timeout=10000)
+            chips.first.click()
+            expect(page.locator("#source-panel").get_by_text("Source", exact=True)).to_be_visible(timeout=10000)
+
+        step("a citation opens the source section", open_citation, "05-source.png")
+        step("the source dialog closes", dismiss_dialog)
+
+        def ask_image() -> None:
+            box = page.get_by_placeholder("Ask a question about the documents")
+            box.fill("Show me the oxygen reserve chart")
+            box.press("Enter")
+            image = page.locator("img[alt*='bar chart']").first
+            expect(image).to_be_visible(timeout=60000)
+            page.wait_for_function("() => [...document.images].some(i => i.alt.includes('bar chart') && i.naturalWidth > 0)", timeout=15000)
+
+        step("an image question shows the picture inline", ask_image, "06-image.png")
+
+        def bad_content() -> None:
+            fake = work / "fake.docx"
+            fake.write_text("this is not really a word document")
+            page.set_input_files("input[type=file]", str(fake))
+            page.get_by_role("button", name="Upload").click()
+            expect(page.get_by_text("not a valid Word")).to_be_visible(timeout=20000)
+
+        step("a fake .docx is refused by content", bad_content)
+
+        def upload_real() -> None:
+            mine = work / "Pelican Care Guide.docx"
+            make_user_docx(mine)
+            page.set_input_files("input[type=file]", str(mine))
+            page.get_by_role("button", name="Upload").click()
+            expect(page.get_by_text("Claude calls on your key")).to_be_visible(timeout=30000)
+
+        step("a real docx shows a cost estimate before indexing", upload_real, "07-estimate.png")
+
+        def index_it() -> None:
+            page.get_by_role("button", name="Index it").click()
+            expect(page.get_by_text("Pelican Care Guide").first).to_be_visible(timeout=60000)
+            expect(page.get_by_role("button", name="Index it")).to_have_count(0, timeout=60000)
+
+        step("indexing completes and the document joins the library", index_it, "08-indexed.png")
+
+        def ask_mine() -> None:
+            box = page.get_by_placeholder("Ask a question about the documents")
+            box.fill("How much fish does a pelican eat every day?")
+            box.press("Enter")
+            expect(page.get_by_text("one kilogram of fish").first).to_be_visible(timeout=60000)
+
+        step("the uploaded document can be searched", ask_mine, "09-mine.png")
+
+        def key_not_on_disk() -> None:
+            hits = [str(f) for f in data.rglob("*") if f.is_file() and KEY.encode() in f.read_bytes()]
+            assert not hits, f"key found in {hits}"
+            assert any((data / "sessions").iterdir()), "no session folder was created"
+
+        step("the key is not written anywhere on disk", key_not_on_disk)
+
+        def delete_mine() -> None:
+            page.locator("button[title='Delete this document']").first.click()
+            expect(page.get_by_text("sample", exact=True)).to_have_count(3)
+            expect(page.locator("button[title='Delete this document']")).to_have_count(0, timeout=15000)
+
+        step("deleting your document removes it", delete_mine)
+
+        def end_session() -> None:
+            page.get_by_role("button", name="End session and delete my data").click()
+            expect(page.get_by_text("Session ended").first).to_be_visible(timeout=15000)
+            expect(page.get_by_placeholder("sk-ant-...")).to_be_visible(timeout=10000)
+            leftovers = [d for d in (data / "sessions").iterdir()] if (data / "sessions").exists() else []
+            assert not leftovers, f"session folder left behind: {leftovers}"
+
+        step("ending the session deletes the folder and the key", end_session, "10-ended.png")
+
+        def mobile() -> None:
+            page.set_viewport_size({"width": 375, "height": 800})
+            page.wait_for_timeout(600)
+            overflow = page.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
+            assert overflow <= 1, f"page is {overflow}px wider than the screen"
+
+        step("the phone layout does not scroll sideways", mobile, "11-mobile.png")
+
+        real_problems = [p for p in problems if "favicon" not in p and "Failed to load resource" not in p]
+        (out / "browser-errors.txt").write_text("\n\n".join(problems), encoding="utf-8")
+        results.append(("no JavaScript errors in the browser", not real_problems, "; ".join(p[:150] for p in real_problems[:3])))
+        browser.close()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

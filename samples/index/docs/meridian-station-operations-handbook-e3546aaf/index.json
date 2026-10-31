@@ -1,0 +1,408 @@
+{
+  "doc_id": "meridian-station-operations-handbook-e3546aaf",
+  "title": "meridian-station-operations-handbook",
+  "source_path": "meridian-station-operations-handbook.docx",
+  "kind": "docx",
+  "summary": "Top-level handbook for Meridian Station, a fictional low-orbit research outpost focused on long-duration materials science, human health experiments, and staging short cargo craft visits. Covers module layout (Habitat 1, Habitat 2, Laboratory, Cargo joined by a central node, each with its own life-support loop), crew roster and shift hours with overnight rest rules, oxygen, water, and climate/pressure settings (including Figure 1, an oxygen reserve bar chart by module), and emergency procedures for fire, hull breach, and evacuation. Useful for questions about station purpose, crew membership and shifts, life support targets, or what to do in an emergency.",
+  "source_toc": [
+    {
+      "title": "Overview",
+      "level": 1,
+      "page": null
+    },
+    {
+      "title": "Mission",
+      "level": 2,
+      "page": null
+    },
+    {
+      "title": "Station layout",
+      "level": 2,
+      "page": null
+    },
+    {
+      "title": "Crew and Roles",
+      "level": 1,
+      "page": null
+    },
+    {
+      "title": "Roster",
+      "level": 2,
+      "page": null
+    },
+    {
+      "title": "Shift schedule",
+      "level": 2,
+      "page": null
+    },
+    {
+      "title": "Life Support",
+      "level": 1,
+      "page": null
+    },
+    {
+      "title": "Oxygen supply",
+      "level": 2,
+      "page": null
+    },
+    {
+      "title": "Water recycling",
+      "level": 2,
+      "page": null
+    },
+    {
+      "title": "Temperature and pressure",
+      "level": 2,
+      "page": null
+    },
+    {
+      "title": "Emergency Procedures",
+      "level": 1,
+      "page": null
+    },
+    {
+      "title": "Fire",
+      "level": 2,
+      "page": null
+    },
+    {
+      "title": "Hull breach",
+      "level": 2,
+      "page": null
+    },
+    {
+      "title": "Evacuation",
+      "level": 2,
+      "page": null
+    }
+  ],
+  "root": {
+    "id": "root",
+    "title": "meridian-station-operations-handbook",
+    "level": 0,
+    "origin": "original",
+    "summary": "Top-level handbook for Meridian Station, a fictional low-orbit research outpost focused on long-duration materials science, human health experiments, and staging short cargo craft visits. Covers module layout (Habitat 1, Habitat 2, Laboratory, Cargo joined by a central node, each with its own life-support loop), crew roster and shift hours with overnight rest rules, oxygen, water, and climate/pressure settings (including Figure 1, an oxygen reserve bar chart by module), and emergency procedures for fire, hull breach, and evacuation. Useful for questions about station purpose, crew membership and shifts, life support targets, or what to do in an emergency.",
+    "text": "Meridian Station Operations Handbook",
+    "location": {
+      "kind": "docx",
+      "heading_path": [],
+      "pdf_page_start": null,
+      "pdf_page_end": null,
+      "printed_page_start": null,
+      "printed_page_end": null
+    },
+    "children": [
+      {
+        "id": "1",
+        "title": "Overview",
+        "level": 1,
+        "origin": "original",
+        "summary": "Introduces Meridian Station, a fictional low-orbit research outpost, and its mission of long-duration materials science and human health experiments plus staging short cargo craft visits. Also explains the handbook's scope (day-to-day station operations). Covers the four pressurized modules (Habitat 1, Habitat 2, Laboratory, Cargo) joined by a central node, each with its own life-support loop for fault isolation. Includes a table of each module's purpose and crew capacity (4, 2, 3, 1). Useful for questions about station purpose, module functions, crew capacity, or how faults are contained.",
+        "text": "",
+        "location": {
+          "kind": "docx",
+          "heading_path": [
+            "Overview"
+          ],
+          "pdf_page_start": null,
+          "pdf_page_end": null,
+          "printed_page_start": null,
+          "printed_page_end": null
+        },
+        "children": [
+          {
+            "id": "1.1",
+            "title": "Mission",
+            "level": 2,
+            "origin": "original",
+            "summary": "Introduces Meridian Station, a fictional low-orbit research outpost, and states its mission: long-duration experiments in materials science and human health, plus serving as a staging point for short cargo craft visits. Explains that the handbook covers day-to-day station operations. Useful for questions about the station's purpose or what the handbook is for; contains no tables or images.",
+            "text": "Meridian Station is a fictional low-orbit research outpost. Its mission is to run long-duration experiments in materials science and human health, and to serve as a staging point for short visits by cargo craft. This handbook describes how the station is run day to day.",
+            "location": {
+              "kind": "docx",
+              "heading_path": [
+                "Overview",
+                "Mission"
+              ],
+              "pdf_page_start": null,
+              "pdf_page_end": null,
+              "printed_page_start": null,
+              "printed_page_end": null
+            },
+            "children": []
+          },
+          {
+            "id": "1.2",
+            "title": "Station layout",
+            "level": 2,
+            "origin": "original",
+            "summary": "Describes the station's four pressurized modules (Habitat 1, Habitat 2, Laboratory, Cargo) joined by a central node, with each module having its own life-support loop so faults can be isolated. A table lists each module's purpose and crew capacity (4, 2, 3, and 1 respectively). Use it to answer questions about module functions, crew capacity per module, or how problems are contained.",
+            "text": "The station has four pressurized modules connected by a central node. Each module has its own life-support loop, so a problem in one module can be sealed off from the others.\n\n| Module | Purpose | Crew capacity |\n| --- | --- | --- |\n| Habitat 1 | Sleeping quarters and galley | 4 |\n| Habitat 2 | Exercise and medical bay | 2 |\n| Laboratory | Experiments and workstations | 3 |\n| Cargo | Supplies and spare parts | 1 |",
+            "location": {
+              "kind": "docx",
+              "heading_path": [
+                "Overview",
+                "Station layout"
+              ],
+              "pdf_page_start": null,
+              "pdf_page_end": null,
+              "printed_page_start": null,
+              "printed_page_end": null
+            },
+            "children": []
+          }
+        ]
+      },
+      {
+        "id": "2",
+        "title": "Crew and Roles",
+        "level": 1,
+        "origin": "original",
+        "summary": "This parent section has no text of its own and covers two subsections. The Roster subsection has a table listing the current four-person crew, who rotates every six months, with each member's name, role, and shift (Ada Okonkwo, Commander, Day; Luis Vargas, Flight Engineer, Night; Priya Nair, Medical Officer, Day; Tomasz Wrona, Systems Specialist, Night). The Shift schedule subsection defines station-time shift boundaries (day 06:00–14:00, night 14:00–22:00) and the shared 22:00–06:00 rest period, during which only the duty alarm may wake the crew; it has no tables or images. Use this section for questions about crew membership, roles, day versus night assignments, shift hours, or overnight rest rules.",
+        "text": "",
+        "location": {
+          "kind": "docx",
+          "heading_path": [
+            "Crew and Roles"
+          ],
+          "pdf_page_start": null,
+          "pdf_page_end": null,
+          "printed_page_start": null,
+          "printed_page_end": null
+        },
+        "children": [
+          {
+            "id": "2.1",
+            "title": "Roster",
+            "level": 2,
+            "origin": "original",
+            "summary": "Lists the current four-person crew, who rotates every six months, in a table giving each member's name, role, and shift. Members are Ada Okonkwo (Commander, Day), Luis Vargas (Flight Engineer, Night), Priya Nair (Medical Officer, Day), and Tomasz Wrona (Systems Specialist, Night). Use it to answer who is on the crew, what each person's role is, or which members work day versus night shifts.",
+            "text": "The current four-person crew rotates every six months.\n\n| Name | Role | Shift |\n| --- | --- | --- |\n| Ada Okonkwo | Commander | Day |\n| Luis Vargas | Flight Engineer | Night |\n| Priya Nair | Medical Officer | Day |\n| Tomasz Wrona | Systems Specialist | Night |",
+            "location": {
+              "kind": "docx",
+              "heading_path": [
+                "Crew and Roles",
+                "Roster"
+              ],
+              "pdf_page_start": null,
+              "pdf_page_end": null,
+              "printed_page_start": null,
+              "printed_page_end": null
+            },
+            "children": []
+          },
+          {
+            "id": "2.2",
+            "title": "Shift schedule",
+            "level": 2,
+            "origin": "original",
+            "summary": "Defines the station-time shift boundaries: day shift 06:00 to 14:00, night shift 14:00 to 22:00, and a shared rest period from 22:00 to 06:00 during which only the duty alarm may wake the crew. Use this section to answer questions about when each shift starts and ends, or what is permitted during the overnight rest period. It contains no tables or images.",
+            "text": "Day shift runs 06:00 to 14:00 station time and night shift runs 14:00 to 22:00. The hours from 22:00 to 06:00 are a shared rest period, and only the duty alarm may wake the crew.",
+            "location": {
+              "kind": "docx",
+              "heading_path": [
+                "Crew and Roles",
+                "Shift schedule"
+              ],
+              "pdf_page_start": null,
+              "pdf_page_end": null,
+              "printed_page_start": null,
+              "printed_page_end": null
+            },
+            "children": []
+          }
+        ]
+      },
+      {
+        "id": "3",
+        "title": "Life Support",
+        "level": 1,
+        "origin": "original",
+        "summary": "This parent section has no text of its own and groups three subsections: Oxygen supply, Water recycling, and Temperature and pressure. Oxygen supply covers electrolysis-based production, per-module tank storage, shift-by-shift reserve checks, and the 50 percent minimum reserve rule, and includes Figure 1, a bar chart of oxygen reserve levels by module (Habitat 1 92%, Habitat 2 81%, Laboratory 67%, Cargo 54%; values taken from the caption since the chart has no visible axes or legend). Water recycling gives the roughly 93 percent recovery rate and how losses are replaced by cargo craft. Temperature and pressure gives the 21 °C and 101 kPa targets and the alarm for a pressure drop over 3 kPa within ten minutes. Use this section for questions about oxygen, water, or cabin climate and pressure settings.",
+        "text": "",
+        "location": {
+          "kind": "docx",
+          "heading_path": [
+            "Life Support"
+          ],
+          "pdf_page_start": null,
+          "pdf_page_end": null,
+          "printed_page_start": null,
+          "printed_page_end": null
+        },
+        "children": [
+          {
+            "id": "3.1",
+            "title": "Oxygen supply",
+            "level": 2,
+            "origin": "original",
+            "summary": "Describes how oxygen is produced by electrolysis of recycled water and stored in per-module tanks, with reserves checked every shift and a rule that no module drops below 50 percent of tank capacity without notifying the commander. Figure 1 is a bar chart of oxygen reserve percentages by module (Habitat 1 at 92%, Habitat 2 at 81%, Laboratory at 67%, Cargo at 54%); the image itself has no visible axis labels or legend, so the figure caption is the source for values. Use this section to answer questions about oxygen production, storage, monitoring frequency, reserve thresholds, or current reserve levels by module.",
+            "text": "Oxygen is produced by electrolysis of recycled water and stored in tanks in each module. Reserves are checked every shift. A module must never drop below 50 percent of tank capacity without the commander being told.\n\n[image:img-1]\n\nFigure 1. Oxygen reserve by module, as a percent of capacity: Habitat 1 at 92, Habitat 2 at 81, Laboratory at 67, Cargo at 54.",
+            "location": {
+              "kind": "docx",
+              "heading_path": [
+                "Life Support",
+                "Oxygen supply"
+              ],
+              "pdf_page_start": null,
+              "pdf_page_end": null,
+              "printed_page_start": null,
+              "printed_page_end": null
+            },
+            "children": []
+          },
+          {
+            "id": "3.2",
+            "title": "Water recycling",
+            "level": 2,
+            "origin": "original",
+            "summary": "Explains that about 93 percent of water is recovered and reused, including humidity from the air and treated wastewater. The remaining loss is replenished with water tanks delivered by cargo craft. Useful for questions about water recovery rates, water sources, or how water losses are supplied.",
+            "text": "About 93 percent of water, including humidity from the air and treated wastewater, is recovered and reused. The remaining loss is made up from tanks delivered by cargo craft.",
+            "location": {
+              "kind": "docx",
+              "heading_path": [
+                "Life Support",
+                "Water recycling"
+              ],
+              "pdf_page_start": null,
+              "pdf_page_end": null,
+              "printed_page_start": null,
+              "printed_page_end": null
+            },
+            "children": []
+          },
+          {
+            "id": "3.3",
+            "title": "Temperature and pressure",
+            "level": 2,
+            "origin": "original",
+            "summary": "Specifies the cabin's target temperature (21 degrees Celsius) and pressure (101 kilopascals). Also describes the alarm that sounds if pressure drops by more than 3 kilopascals within ten minutes. Use this section to answer questions about cabin climate settings or pressure-loss alarm thresholds.",
+            "text": "Cabin temperature is held at 21 degrees Celsius and pressure at 101 kilopascals. An alarm sounds if pressure falls by more than 3 kilopascals within ten minutes.",
+            "location": {
+              "kind": "docx",
+              "heading_path": [
+                "Life Support",
+                "Temperature and pressure"
+              ],
+              "pdf_page_start": null,
+              "pdf_page_end": null,
+              "printed_page_start": null,
+              "printed_page_end": null
+            },
+            "children": []
+          }
+        ]
+      },
+      {
+        "id": "4",
+        "title": "Emergency Procedures",
+        "level": 1,
+        "origin": "original",
+        "summary": "This parent section has no text of its own and groups three emergency procedures: Fire, Hull breach, and Evacuation. It answers questions about what to do during a fire (sound the alarm, shut module ventilation, use the nearest extinguisher, never open a hatch to a burning module, report to the commander at the central node), how the crew responds to a hull breach (seal the module, count crew at the central node, Systems Specialist patches the leak with the repair kit stored in the Cargo module), and evacuation (crew boards the escape capsule at the central node, commander authorizes evacuation, capsule holds four seats with three days of supplies). No tables or images appear in this section.",
+        "text": "",
+        "location": {
+          "kind": "docx",
+          "heading_path": [
+            "Emergency Procedures"
+          ],
+          "pdf_page_start": null,
+          "pdf_page_end": null,
+          "printed_page_start": null,
+          "printed_page_end": null
+        },
+        "children": [
+          {
+            "id": "4.1",
+            "title": "Fire",
+            "level": 2,
+            "origin": "original",
+            "summary": "Emergency procedure for a fire aboard the station: sound the alarm, shut the module's ventilation, and use the nearest extinguisher. It warns never to open a hatch to a burning module and says to report to the commander at the central node. Use this section for questions about what to do during a fire or who to notify; it has no subsections or tables.",
+            "text": "Sound the alarm, shut the module's ventilation, and use the nearest extinguisher. Never open a hatch to a module that is on fire. Report to the commander from the central node.",
+            "location": {
+              "kind": "docx",
+              "heading_path": [
+                "Emergency Procedures",
+                "Fire"
+              ],
+              "pdf_page_start": null,
+              "pdf_page_end": null,
+              "printed_page_start": null,
+              "printed_page_end": null
+            },
+            "children": []
+          },
+          {
+            "id": "4.2",
+            "title": "Hull breach",
+            "level": 2,
+            "origin": "original",
+            "summary": "Describes the crew's response to a hull breach: when the pressure alarm sounds, move to the nearest hatch and seal the affected module, then count the crew at the central node. The Systems Specialist locates the leak using the pressure map and patches it with the repair kit stored in the Cargo module. Useful for questions about emergency leak procedures, alarm response, crew accountability, or where the repair kit is kept. No tables or images.",
+            "text": "When the pressure alarm sounds, move to the nearest hatch and seal the affected module. Count the crew at the central node. The Systems Specialist then locates the leak using the pressure map and patches it with the repair kit stored in the Cargo module.",
+            "location": {
+              "kind": "docx",
+              "heading_path": [
+                "Emergency Procedures",
+                "Hull breach"
+              ],
+              "pdf_page_start": null,
+              "pdf_page_end": null,
+              "printed_page_start": null,
+              "printed_page_end": null
+            },
+            "children": []
+          },
+          {
+            "id": "4.3",
+            "title": "Evacuation",
+            "level": 2,
+            "origin": "original",
+            "summary": "Describes the evacuation procedure for when the station cannot be made safe: the crew boards the escape capsule docked at the central node, and the commander decides when to evacuate. Covers capsule capacity (four seats) and supplies (three days). Useful for questions about who authorizes evacuation, where the escape capsule is located, how many people it holds, or how long its supplies last. No tables or images.",
+            "text": "If the station cannot be made safe, the crew boards the escape capsule docked at the central node. The commander decides when to evacuate. The capsule seats four and carries three days of supplies.",
+            "location": {
+              "kind": "docx",
+              "heading_path": [
+                "Emergency Procedures",
+                "Evacuation"
+              ],
+              "pdf_page_start": null,
+              "pdf_page_end": null,
+              "printed_page_start": null,
+              "printed_page_end": null
+            },
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  "images": [
+    {
+      "id": "img-1",
+      "file": "images/img-1.png",
+      "mime": "image/png",
+      "node_id": "3.1",
+      "location": {
+        "kind": "docx",
+        "heading_path": [
+          "Life Support",
+          "Oxygen supply"
+        ],
+        "pdf_page_start": null,
+        "pdf_page_end": null,
+        "printed_page_start": null,
+        "printed_page_end": null
+      },
+      "description": "A simple bar chart with four vertical bars in blue, orange, green, and purple, arranged from left to right in descending height. No axis labels, numbers, or legend are visible.",
+      "tags": [
+        "bar chart",
+        "four bars",
+        "blue",
+        "orange",
+        "green",
+        "purple",
+        "descending",
+        "data visualization",
+        "no labels"
+      ]
+    }
+  ]
+}

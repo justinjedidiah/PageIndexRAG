@@ -1,0 +1,15 @@
+.web
+*.db
+assets/external/
+.states
+*.py[cod]
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.env
+data/
+
+# Reflex
+.web/
+.states/

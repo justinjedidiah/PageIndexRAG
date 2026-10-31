@@ -1,0 +1,15 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+.radix-themes {
+  --default-font-family: "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+html,
+body {
+  background: var(--gray-4);
+}
+
+/* quieter scrollbars inside the panels */
+.rt-ScrollAreaScrollbar {
+  background: transparent;
+}

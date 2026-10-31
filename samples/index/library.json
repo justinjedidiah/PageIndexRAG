@@ -1,0 +1,20 @@
+[
+  {
+    "doc_id": "home-solar-installation-guide-1368a8b6",
+    "title": "home-solar-installation-guide",
+    "kind": "docx",
+    "summary": "Covers the full process of installing residential solar panels: pre-installation roof and permit checks, equipment choices (panel types, string vs. microinverters, batteries), installation steps (mounting, wiring, and inspection), and maintenance and fault troubleshooting. Use it for questions about roof suitability, minimum area, which panel or inverter type to pick, mounting clearances, wiring and electrical safety, inspection requirements, cleaning frequency, or diagnosing output drops. The Choosing Equipment section includes a table comparing monocrystalline, polycrystalline, and thin-film panels; no other sections contain tables or images."
+  },
+  {
+    "doc_id": "meridian-station-operations-handbook-e3546aaf",
+    "title": "meridian-station-operations-handbook",
+    "kind": "docx",
+    "summary": "Top-level handbook for Meridian Station, a fictional low-orbit research outpost focused on long-duration materials science, human health experiments, and staging short cargo craft visits. Covers module layout (Habitat 1, Habitat 2, Laboratory, Cargo joined by a central node, each with its own life-support loop), crew roster and shift hours with overnight rest rules, oxygen, water, and climate/pressure settings (including Figure 1, an oxygen reserve bar chart by module), and emergency procedures for fire, hull breach, and evacuation. Useful for questions about station purpose, crew membership and shifts, life support targets, or what to do in an emergency."
+  },
+  {
+    "doc_id": "nimbus-robotics-q3-2026-report-4a35d330",
+    "title": "nimbus-robotics-q3-2026-report",
+    "kind": "docx",
+    "summary": "Covers Nimbus Robotics (a fictional maker of warehouse robots and delivery drones) Q3 2026 results, product news, and risks/outlook. Answers questions about headline performance (revenue up 12% YoY to $41.4M, return to operating profit), regional revenue split and operating costs (37.4M total), cash position ($52.6M, no debt), the WR-4 warehouse robot and D-2 drone launch timelines, battery supply and regulatory risks, and Q4 guidance ($44M-$47M revenue). Includes a regional revenue table and an operating costs table; the other subsections contain no tables or images."
+  }
+]

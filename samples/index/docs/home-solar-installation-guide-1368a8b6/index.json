@@ -1,0 +1,378 @@
+{
+  "doc_id": "home-solar-installation-guide-1368a8b6",
+  "title": "home-solar-installation-guide",
+  "source_path": "home-solar-installation-guide.docx",
+  "kind": "docx",
+  "summary": "Covers the full process of installing residential solar panels: pre-installation roof and permit checks, equipment choices (panel types, string vs. microinverters, batteries), installation steps (mounting, wiring, and inspection), and maintenance and fault troubleshooting. Use it for questions about roof suitability, minimum area, which panel or inverter type to pick, mounting clearances, wiring and electrical safety, inspection requirements, cleaning frequency, or diagnosing output drops. The Choosing Equipment section includes a table comparing monocrystalline, polycrystalline, and thin-film panels; no other sections contain tables or images.",
+  "source_toc": [
+    {
+      "title": "Before You Start",
+      "level": 1,
+      "page": null
+    },
+    {
+      "title": "Is your roof suitable?",
+      "level": 2,
+      "page": null
+    },
+    {
+      "title": "Permits and codes",
+      "level": 2,
+      "page": null
+    },
+    {
+      "title": "Choosing Equipment",
+      "level": 1,
+      "page": null
+    },
+    {
+      "title": "Panels",
+      "level": 2,
+      "page": null
+    },
+    {
+      "title": "Inverters",
+      "level": 2,
+      "page": null
+    },
+    {
+      "title": "Batteries",
+      "level": 2,
+      "page": null
+    },
+    {
+      "title": "Installation Steps",
+      "level": 1,
+      "page": null
+    },
+    {
+      "title": "Mounting",
+      "level": 2,
+      "page": null
+    },
+    {
+      "title": "Wiring",
+      "level": 2,
+      "page": null
+    },
+    {
+      "title": "Inspection",
+      "level": 2,
+      "page": null
+    },
+    {
+      "title": "Maintenance and Troubleshooting",
+      "level": 1,
+      "page": null
+    },
+    {
+      "title": "Cleaning",
+      "level": 2,
+      "page": null
+    },
+    {
+      "title": "Common faults",
+      "level": 2,
+      "page": null
+    }
+  ],
+  "root": {
+    "id": "root",
+    "title": "home-solar-installation-guide",
+    "level": 0,
+    "origin": "original",
+    "summary": "Covers the full process of installing residential solar panels: pre-installation roof and permit checks, equipment choices (panel types, string vs. microinverters, batteries), installation steps (mounting, wiring, and inspection), and maintenance and fault troubleshooting. Use it for questions about roof suitability, minimum area, which panel or inverter type to pick, mounting clearances, wiring and electrical safety, inspection requirements, cleaning frequency, or diagnosing output drops. The Choosing Equipment section includes a table comparing monocrystalline, polycrystalline, and thin-film panels; no other sections contain tables or images.",
+    "text": "Home Solar Installation Guide",
+    "location": {
+      "kind": "docx",
+      "heading_path": [],
+      "pdf_page_start": null,
+      "pdf_page_end": null,
+      "printed_page_start": null,
+      "printed_page_end": null
+    },
+    "children": [
+      {
+        "id": "1",
+        "title": "Before You Start",
+        "level": 1,
+        "origin": "original",
+        "summary": "This section covers the preliminary checks to make before installing solar panels. It explains the roof criteria that matter most (orientation, shading, condition, and a rough minimum usable area of about 20 square meters) and the permits and utility approvals that are typically required, including when to check local rules. It contains no tables or images.",
+        "text": "",
+        "location": {
+          "kind": "docx",
+          "heading_path": [
+            "Before You Start"
+          ],
+          "pdf_page_start": null,
+          "pdf_page_end": null,
+          "printed_page_start": null,
+          "printed_page_end": null
+        },
+        "children": [
+          {
+            "id": "1.1",
+            "title": "Is your roof suitable?",
+            "level": 2,
+            "origin": "original",
+            "summary": "Explains the main roof criteria for solar panels: a south-facing orientation in the northern hemisphere with little shade gives the best output, and the roof should be in good condition since panels last 25+ years and removal for repairs is costly. Also gives a rough size guideline of at least 20 square meters of usable area for a typical home. Answers questions about roof orientation, shading, roof condition, and minimum area for solar installation; contains no tables or images.",
+            "text": "A south-facing roof (in the northern hemisphere) with little shade gives the best output. The roof should be in good condition, because panels last 25 years or more and removing them to repair the roof is costly. Aim for at least 20 square meters of usable area for a typical home.",
+            "location": {
+              "kind": "docx",
+              "heading_path": [
+                "Before You Start",
+                "Is your roof suitable?"
+              ],
+              "pdf_page_start": null,
+              "pdf_page_end": null,
+              "printed_page_start": null,
+              "printed_page_end": null
+            },
+            "children": []
+          },
+          {
+            "id": "1.2",
+            "title": "Permits and codes",
+            "level": 2,
+            "origin": "original",
+            "summary": "Explains that most areas require a building permit and an electrical permit for a solar installation, and that the utility may need to approve a grid connection before the system is switched on. Advises checking local rules before buying equipment. Useful for questions about which permits or approvals are needed and when to check requirements. No tables or images.",
+            "text": "Most areas require a building permit and an electrical permit. Your utility may also need to approve a grid connection before you switch the system on. Check local rules before you buy any equipment.",
+            "location": {
+              "kind": "docx",
+              "heading_path": [
+                "Before You Start",
+                "Permits and codes"
+              ],
+              "pdf_page_start": null,
+              "pdf_page_end": null,
+              "printed_page_start": null,
+              "printed_page_end": null
+            },
+            "children": []
+          }
+        ]
+      },
+      {
+        "id": "2",
+        "title": "Choosing Equipment",
+        "level": 1,
+        "origin": "original",
+        "summary": "This parent section has no text of its own and serves as a container for three subsections: Panels, Inverters, and Batteries. Panels compares monocrystalline, polycrystalline, and thin-film types by efficiency, cost, roof space, weight, flexibility, and lifespan, using a table. Inverters covers string versus microinverter options, their cost, and how shading affects output, with no tables or images. Batteries explains energy storage for night use or outages and when storage is worthwhile, with no tables or images.",
+        "text": "",
+        "location": {
+          "kind": "docx",
+          "heading_path": [
+            "Choosing Equipment"
+          ],
+          "pdf_page_start": null,
+          "pdf_page_end": null,
+          "printed_page_start": null,
+          "printed_page_end": null
+        },
+        "children": [
+          {
+            "id": "2.1",
+            "title": "Panels",
+            "level": 2,
+            "origin": "original",
+            "summary": "Compares three common solar panel types (monocrystalline, polycrystalline, thin-film) by typical efficiency, which is the share of sunlight converted to electricity. A table lists each type's efficiency range alongside notes on price, roof space needs, weight and flexibility, and lifespan. Use it to answer questions about panel efficiency, cost trade-offs, or which type suits limited roof area.",
+            "text": "Three panel types are common. Efficiency is the share of sunlight turned into electricity.\n\n| Type | Typical efficiency | Notes |\n| --- | --- | --- |\n| Monocrystalline | 20 to 22 percent | Best output per area, highest price |\n| Polycrystalline | 15 to 17 percent | Lower price, needs more roof space |\n| Thin-film | 10 to 13 percent | Light and flexible, shortest lifespan |",
+            "location": {
+              "kind": "docx",
+              "heading_path": [
+                "Choosing Equipment",
+                "Panels"
+              ],
+              "pdf_page_start": null,
+              "pdf_page_end": null,
+              "printed_page_start": null,
+              "printed_page_end": null
+            },
+            "children": []
+          },
+          {
+            "id": "2.2",
+            "title": "Inverters",
+            "level": 2,
+            "origin": "original",
+            "summary": "Explains the inverter's role in converting panel direct current into household alternating current. Compares single string inverters, which are the cheapest option, with microinverters mounted under each panel, which keep the rest of the system producing when one panel is shaded. Use it to answer questions about inverter types, their cost, or how shading affects output. The section has no tables, images, or subsections.",
+            "text": "The inverter converts the direct current from the panels into alternating current for your home. A single string inverter is cheapest. Microinverters sit under each panel and keep the rest producing when one panel is shaded.",
+            "location": {
+              "kind": "docx",
+              "heading_path": [
+                "Choosing Equipment",
+                "Inverters"
+              ],
+              "pdf_page_start": null,
+              "pdf_page_end": null,
+              "printed_page_start": null,
+              "printed_page_end": null
+            },
+            "children": []
+          },
+          {
+            "id": "2.3",
+            "title": "Batteries",
+            "level": 2,
+            "origin": "original",
+            "summary": "Explains what a battery does in a solar or home power setup: it stores surplus daytime electricity for use at night or during an outage. Covers the trade-off that batteries add cost and are most worthwhile where the grid is unreliable or where night-time electricity is cheaper. No tables or images.",
+            "text": "A battery stores extra daytime power for use at night or during an outage. It adds cost, and is most useful where the grid is unreliable or where electricity is cheaper at night.",
+            "location": {
+              "kind": "docx",
+              "heading_path": [
+                "Choosing Equipment",
+                "Batteries"
+              ],
+              "pdf_page_start": null,
+              "pdf_page_end": null,
+              "printed_page_start": null,
+              "printed_page_end": null
+            },
+            "children": []
+          }
+        ]
+      },
+      {
+        "id": "3",
+        "title": "Installation Steps",
+        "level": 1,
+        "origin": "original",
+        "summary": "This parent section has no text of its own and groups three subsections: Mounting (roof anchors, sealing penetrations, rails, and roughly 10 cm clearance under panels), Wiring (series strings, cabling to the inverter, DC isolator, and low-light safety precautions), and Inspection (local inspector approval before grid connection, and retaining permit papers and datasheets). Use it for questions about installation order, roof waterproofing, panel wiring and electrical safety, or when inspection is needed and which records to keep. No tables or images.",
+        "text": "",
+        "location": {
+          "kind": "docx",
+          "heading_path": [
+            "Installation Steps"
+          ],
+          "pdf_page_start": null,
+          "pdf_page_end": null,
+          "printed_page_start": null,
+          "printed_page_end": null
+        },
+        "children": [
+          {
+            "id": "3.1",
+            "title": "Mounting",
+            "level": 2,
+            "origin": "original",
+            "summary": "Explains how to mount the system: fix roof anchors into the rafters, seal each anchor hole against water, then attach the rails. Also specifies leaving a gap of about ten centimeters under the panels for air cooling. Useful for questions about installation order, waterproofing the roof penetrations, or required clearance under the panels. No tables or images.",
+            "text": "Fix the roof anchors into the rafters, seal each hole against water, then attach the rails. Leave a gap of about ten centimeters under the panels so air can cool them.",
+            "location": {
+              "kind": "docx",
+              "heading_path": [
+                "Installation Steps",
+                "Mounting"
+              ],
+              "pdf_page_start": null,
+              "pdf_page_end": null,
+              "printed_page_start": null,
+              "printed_page_end": null
+            },
+            "children": []
+          },
+          {
+            "id": "3.2",
+            "title": "Wiring",
+            "level": 2,
+            "origin": "original",
+            "summary": "Explains how to wire the solar panels: connect them in series strings, run the cable to the inverter, and fit a DC isolator switch. It also warns that panels produce voltage whenever light hits them, so they should be covered or worked on in low light. Use it for questions about panel wiring, string configuration, DC isolators, or electrical safety during installation. It contains no tables or images.",
+            "text": "Connect the panels in series strings, run the cable to the inverter, and fit a DC isolator switch. Always cover the panels or work in low light, because they produce voltage whenever light falls on them.",
+            "location": {
+              "kind": "docx",
+              "heading_path": [
+                "Installation Steps",
+                "Wiring"
+              ],
+              "pdf_page_start": null,
+              "pdf_page_end": null,
+              "printed_page_start": null,
+              "printed_page_end": null
+            },
+            "children": []
+          },
+          {
+            "id": "3.3",
+            "title": "Inspection",
+            "level": 2,
+            "origin": "original",
+            "summary": "Explains that the local inspector must approve the work before it is connected to the grid, and that permit papers and equipment datasheets should be kept for records. Useful for questions about when inspection is required in the grid-connection process and what documents to retain.",
+            "text": "Have the local inspector approve the work before it is connected to the grid. Keep the permit papers and the equipment datasheets for your records.",
+            "location": {
+              "kind": "docx",
+              "heading_path": [
+                "Installation Steps",
+                "Inspection"
+              ],
+              "pdf_page_start": null,
+              "pdf_page_end": null,
+              "printed_page_start": null,
+              "printed_page_end": null
+            },
+            "children": []
+          }
+        ]
+      },
+      {
+        "id": "4",
+        "title": "Maintenance and Troubleshooting",
+        "level": 1,
+        "origin": "original",
+        "summary": "This parent section has no text of its own and groups two subsections. Cleaning covers how often to clean solar panels (rain is usually enough; dusty areas need rinsing once or twice a year in the early morning) and which methods to avoid, such as abrasive pads and pressure washers. Common faults covers diagnosing a sudden output drop by checking the inverter error code, why a single-string drop often means a loose connector or shaded panel, and when to switch off and call a qualified electrician for a ground fault. No tables or images appear in either subsection.",
+        "text": "",
+        "location": {
+          "kind": "docx",
+          "heading_path": [
+            "Maintenance and Troubleshooting"
+          ],
+          "pdf_page_start": null,
+          "pdf_page_end": null,
+          "printed_page_start": null,
+          "printed_page_end": null
+        },
+        "children": [
+          {
+            "id": "4.1",
+            "title": "Cleaning",
+            "level": 2,
+            "origin": "original",
+            "summary": "Explains how to keep solar panels clean: rain is usually sufficient, while dusty areas call for rinsing with water once or twice a year in the early morning. It also warns against abrasive pads and pressure washers. Useful for questions about cleaning frequency, timing, or methods to avoid. The section is text only, with no tables or images.",
+            "text": "Rain keeps most panels clean enough. In dusty areas, rinse them with water once or twice a year in the early morning. Do not use abrasive pads or a pressure washer.",
+            "location": {
+              "kind": "docx",
+              "heading_path": [
+                "Maintenance and Troubleshooting",
+                "Cleaning"
+              ],
+              "pdf_page_start": null,
+              "pdf_page_end": null,
+              "printed_page_start": null,
+              "printed_page_end": null
+            },
+            "children": []
+          },
+          {
+            "id": "4.2",
+            "title": "Common faults",
+            "level": 2,
+            "origin": "original",
+            "summary": "Explains what to do when solar system output drops suddenly: check the inverter display for an error code, and note that a drop on a single string often points to a loose connector or a shaded panel. Covers the ground fault case, where the system should be switched off and a qualified electrician called. Useful for questions about troubleshooting sudden power loss, interpreting inverter error codes, or when to call a professional.",
+            "text": "If output falls suddenly, check the inverter display for an error code first. A drop on one string often means a loose connector or a shaded panel. If the inverter shows a ground fault, turn the system off and call a qualified electrician.",
+            "location": {
+              "kind": "docx",
+              "heading_path": [
+                "Maintenance and Troubleshooting",
+                "Common faults"
+              ],
+              "pdf_page_start": null,
+              "pdf_page_end": null,
+              "printed_page_start": null,
+              "printed_page_end": null
+            },
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  "images": []
+}
