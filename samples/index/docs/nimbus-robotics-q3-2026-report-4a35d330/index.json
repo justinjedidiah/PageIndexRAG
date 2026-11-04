@@ -3,7 +3,7 @@
   "title": "nimbus-robotics-q3-2026-report",
   "source_path": "nimbus-robotics-q3-2026-report.docx",
   "kind": "docx",
-  "summary": "Covers Nimbus Robotics (a fictional maker of warehouse robots and delivery drones) Q3 2026 results, product news, and risks/outlook. Answers questions about headline performance (revenue up 12% YoY to $41.4M, return to operating profit), regional revenue split and operating costs (37.4M total), cash position ($52.6M, no debt), the WR-4 warehouse robot and D-2 drone launch timelines, battery supply and regulatory risks, and Q4 guidance ($44M-$47M revenue). Includes a regional revenue table and an operating costs table; the other subsections contain no tables or images.",
+  "summary": "Top-level report for fictional warehouse robot and delivery drone maker Nimbus Robotics, covering Q3 2026. It spans four subsections: the executive summary (revenue up 12% year over year to $41.4M and a return to operating profit), financial results (regional revenue, operating cost breakdown, $4.0M operating income vs. a $1.2M loss a year earlier, $52.6M cash with no debt), product updates (WR-4 warehouse robot shipping since July with 310 quarterly orders, 60 kg payload, ten-hour runtime; D-2 drone passing European regulatory tests with commercial deliveries planned for Q1 next year), and risks and outlook (battery cell supply from two suppliers with a third being qualified, country-specific drone rules, and Q4 revenue guidance of $44-47M). Use it for questions about Q3 2026 financials, cost and regional breakdowns, product milestones, or risks and Q4 guidance. It contains two tables (regional revenue and operating costs) and no images.",
   "source_toc": [
     {
       "title": "Executive Summary",
@@ -71,7 +71,8 @@
     "title": "nimbus-robotics-q3-2026-report",
     "level": 0,
     "origin": "original",
-    "summary": "Covers Nimbus Robotics (a fictional maker of warehouse robots and delivery drones) Q3 2026 results, product news, and risks/outlook. Answers questions about headline performance (revenue up 12% YoY to $41.4M, return to operating profit), regional revenue split and operating costs (37.4M total), cash position ($52.6M, no debt), the WR-4 warehouse robot and D-2 drone launch timelines, battery supply and regulatory risks, and Q4 guidance ($44M-$47M revenue). Includes a regional revenue table and an operating costs table; the other subsections contain no tables or images.",
+    "summary": "Top-level report for fictional warehouse robot and delivery drone maker Nimbus Robotics, covering Q3 2026. It spans four subsections: the executive summary (revenue up 12% year over year to $41.4M and a return to operating profit), financial results (regional revenue, operating cost breakdown, $4.0M operating income vs. a $1.2M loss a year earlier, $52.6M cash with no debt), product updates (WR-4 warehouse robot shipping since July with 310 quarterly orders, 60 kg payload, ten-hour runtime; D-2 drone passing European regulatory tests with commercial deliveries planned for Q1 next year), and risks and outlook (battery cell supply from two suppliers with a third being qualified, country-specific drone rules, and Q4 revenue guidance of $44-47M). Use it for questions about Q3 2026 financials, cost and regional breakdowns, product milestones, or risks and Q4 guidance. It contains two tables (regional revenue and operating costs) and no images.",
+    "summary_source": "llm",
     "text": "Nimbus Robotics Q3 2026 Report",
     "location": {
       "kind": "docx",
@@ -79,7 +80,8 @@
       "pdf_page_start": null,
       "pdf_page_end": null,
       "printed_page_start": null,
-      "printed_page_end": null
+      "printed_page_end": null,
+      "covers": []
     },
     "children": [
       {
@@ -87,7 +89,8 @@
         "title": "Executive Summary",
         "level": 1,
         "origin": "original",
-        "summary": "Overview of Nimbus Robotics, a fictional maker of warehouse robots and delivery drones, covering Q3 2026 results: revenue up 12 percent year over year to $41.4 million, and a return to operating profit. Use this section to answer questions about the company's headline Q3 2026 financial performance; it contains no tables or images and no detailed breakdowns.",
+        "summary": "Introduces Nimbus Robotics, a fictional maker of warehouse robots and delivery drones, and reports its Q3 2026 results: revenue up 12 percent year over year to $41.4 million, with the company returning to operating profit. Useful for questions about the company's business lines, its Q3 2026 revenue and growth, or its return to profitability. The section is text only and contains no tables or images.",
+        "summary_source": "llm",
         "text": "Nimbus Robotics is a fictional maker of warehouse robots and delivery drones. In the third quarter of 2026, revenue grew 12 percent on the same quarter last year to 41.4 million dollars, and the company returned to operating profit.",
         "location": {
           "kind": "docx",
@@ -97,7 +100,8 @@
           "pdf_page_start": null,
           "pdf_page_end": null,
           "printed_page_start": null,
-          "printed_page_end": null
+          "printed_page_end": null,
+          "covers": []
         },
         "children": []
       },
@@ -106,8 +110,9 @@
         "title": "Financial Results",
         "level": 1,
         "origin": "original",
-        "summary": "This section covers the company's financial results through three subsections: revenue by region, operating costs, and cash position. It can answer questions about total revenue (USD 41.4 million) and its split across North America (18.4M), Europe (11.2M), Asia-Pacific (9.7M), and Other (2.1M), including which region is largest and fastest-growing (Asia-Pacific). It also covers quarterly operating costs by category (manufacturing, R&D, sales and marketing, G&A, totaling 37.4M), the operating income swing from a 1.2M loss to 4.0M profit, and cash of $52.6M versus $47.9M prior quarter with no outstanding debt. A regional revenue table and an operating costs table are included.",
-        "text": "",
+        "summary": "Covers quarterly financial performance: revenue by region (North America 18.4M, Europe 11.2M, Asia-Pacific 9.7M, Other 2.1M, total 41.4M USD millions), operating costs by category (manufacturing, R&D, sales and marketing, G&A, total 37.4M), and operating income of 4.0M versus a 1.2M loss a year earlier. Also reports cash and equivalents of 52.6M, up from 47.9M last quarter, with no outstanding debt. Tables show the regional revenue breakdown and the operating cost breakdown. Answers questions about revenue by region, cost structure, profitability, and cash position.",
+        "summary_source": "llm",
+        "text": "Revenue by region\nNorth America remains the largest market, followed by Europe. Asia-Pacific grew fastest.\n\n| Region | Revenue (USD millions) |\n| --- | --- |\n| North America | 18.4 |\n| Europe | 11.2 |\n| Asia-Pacific | 9.7 |\n| Other | 2.1 |\n| Total | 41.4 |\n\nOperating costs\n| Category | Cost (USD millions) |\n| --- | --- |\n| Manufacturing | 17.3 |\n| Research and development | 9.8 |\n| Sales and marketing | 6.4 |\n| General and administrative | 3.9 |\n| Total | 37.4 |\n\nOperating income for the quarter was 4.0 million dollars, compared with a loss of 1.2 million dollars a year ago.\n\nCash position\nCash and equivalents ended the quarter at 52.6 million dollars, up from 47.9 million at the end of the previous quarter. The company has no outstanding debt.",
         "location": {
           "kind": "docx",
           "heading_path": [
@@ -116,78 +121,23 @@
           "pdf_page_start": null,
           "pdf_page_end": null,
           "printed_page_start": null,
-          "printed_page_end": null
+          "printed_page_end": null,
+          "covers": [
+            "Revenue by region",
+            "Operating costs",
+            "Cash position"
+          ]
         },
-        "children": [
-          {
-            "id": "2.1",
-            "title": "Revenue by region",
-            "level": 2,
-            "origin": "original",
-            "summary": "Breaks down total revenue (USD 41.4 million) by region: North America is the largest market at 18.4 million, followed by Europe at 11.2 million, Asia-Pacific at 9.7 million, and Other at 2.1 million. Notes that Asia-Pacific is the fastest-growing region. Includes a table of regional revenue figures; answers questions about regional revenue splits, the largest and fastest-growing markets, and total revenue.",
-            "text": "North America remains the largest market, followed by Europe. Asia-Pacific grew fastest.\n\n| Region | Revenue (USD millions) |\n| --- | --- |\n| North America | 18.4 |\n| Europe | 11.2 |\n| Asia-Pacific | 9.7 |\n| Other | 2.1 |\n| Total | 41.4 |",
-            "location": {
-              "kind": "docx",
-              "heading_path": [
-                "Financial Results",
-                "Revenue by region"
-              ],
-              "pdf_page_start": null,
-              "pdf_page_end": null,
-              "printed_page_start": null,
-              "printed_page_end": null
-            },
-            "children": []
-          },
-          {
-            "id": "2.2",
-            "title": "Operating costs",
-            "level": 2,
-            "origin": "original",
-            "summary": "Breaks down quarterly operating costs by category in USD millions: manufacturing 17.3, research and development 9.8, sales and marketing 6.4, general and administrative 3.9, totaling 37.4. It also reports operating income of 4.0 million for the quarter versus a 1.2 million loss a year earlier. Use it to answer questions about expense categories, total operating costs, or the year-over-year swing in operating income. The section contains one table and no subsections.",
-            "text": "| Category | Cost (USD millions) |\n| --- | --- |\n| Manufacturing | 17.3 |\n| Research and development | 9.8 |\n| Sales and marketing | 6.4 |\n| General and administrative | 3.9 |\n| Total | 37.4 |\n\nOperating income for the quarter was 4.0 million dollars, compared with a loss of 1.2 million dollars a year ago.",
-            "location": {
-              "kind": "docx",
-              "heading_path": [
-                "Financial Results",
-                "Operating costs"
-              ],
-              "pdf_page_start": null,
-              "pdf_page_end": null,
-              "printed_page_start": null,
-              "printed_page_end": null
-            },
-            "children": []
-          },
-          {
-            "id": "2.3",
-            "title": "Cash position",
-            "level": 2,
-            "origin": "original",
-            "summary": "Reports cash and equivalents of $52.6 million at quarter end, up from $47.9 million at the end of the prior quarter. States the company has no outstanding debt. Useful for questions about the company's cash balance, quarter-over-quarter change in cash, or whether it carries debt. No tables or images.",
-            "text": "Cash and equivalents ended the quarter at 52.6 million dollars, up from 47.9 million at the end of the previous quarter. The company has no outstanding debt.",
-            "location": {
-              "kind": "docx",
-              "heading_path": [
-                "Financial Results",
-                "Cash position"
-              ],
-              "pdf_page_start": null,
-              "pdf_page_end": null,
-              "printed_page_start": null,
-              "printed_page_end": null
-            },
-            "children": []
-          }
-        ]
+        "children": []
       },
       {
         "id": "3",
         "title": "Product Updates",
         "level": 1,
         "origin": "original",
-        "summary": "This parent section has no text of its own and groups two subsections on product news. The warehouse robot WR-4 subsection covers its July shipping start, a 60 kg maximum load, ten hours of runtime per charge, and 310 units ordered in the quarter, mostly by existing customers. The delivery drone D-2 subsection covers its completed regulatory testing in two European countries and its planned first-quarter commercial launch with pharmacy partners. No tables or images appear in either subsection.",
-        "text": "",
+        "summary": "Covers two product milestones: the WR-4 warehouse robot, which began shipping in July with 310 quarterly orders (mostly existing customers), and its specs of 60 kg payload and ten hours of runtime per charge. Also covers the D-2 delivery drone, which passed regulatory testing in two European countries and plans commercial deliveries starting in Q1 next year with pharmacy partners. Useful for questions about WR-4 specifications or sales, D-2 regulatory status, or launch timing. No tables or images.",
+        "summary_source": "llm",
+        "text": "Warehouse robot WR-4\nThe WR-4 began shipping in July. It carries loads of up to 60 kilograms and runs for ten hours per charge. Orders for the quarter reached 310 units, mostly from existing customers.\n\nDelivery drone D-2\nThe D-2 completed regulatory testing in two European countries. Commercial deliveries are planned to begin in the first quarter of next year, starting with pharmacy partners.",
         "location": {
           "kind": "docx",
           "heading_path": [
@@ -196,58 +146,22 @@
           "pdf_page_start": null,
           "pdf_page_end": null,
           "printed_page_start": null,
-          "printed_page_end": null
+          "printed_page_end": null,
+          "covers": [
+            "Warehouse robot WR-4",
+            "Delivery drone D-2"
+          ]
         },
-        "children": [
-          {
-            "id": "3.1",
-            "title": "Warehouse robot WR-4",
-            "level": 2,
-            "origin": "original",
-            "summary": "Covers the WR-4 warehouse robot's shipping start in July, its specifications (60 kg maximum load, ten hours of runtime per charge), and quarterly orders of 310 units, mostly from existing customers. Useful for questions about WR-4 release timing, payload capacity, battery life, or sales volume for the quarter. The section contains no tables or images.",
-            "text": "The WR-4 began shipping in July. It carries loads of up to 60 kilograms and runs for ten hours per charge. Orders for the quarter reached 310 units, mostly from existing customers.",
-            "location": {
-              "kind": "docx",
-              "heading_path": [
-                "Product Updates",
-                "Warehouse robot WR-4"
-              ],
-              "pdf_page_start": null,
-              "pdf_page_end": null,
-              "printed_page_start": null,
-              "printed_page_end": null
-            },
-            "children": []
-          },
-          {
-            "id": "3.2",
-            "title": "Delivery drone D-2",
-            "level": 2,
-            "origin": "original",
-            "summary": "Covers the regulatory status and rollout plan for the D-2 delivery drone. It states that the D-2 has completed regulatory testing in two European countries and that commercial deliveries are planned to start in the first quarter of next year, beginning with pharmacy partners. Use it to answer questions about D-2 certification progress, where it has been tested, or when and with whom commercial deliveries will begin. It has no subsections and no tables or images.",
-            "text": "The D-2 completed regulatory testing in two European countries. Commercial deliveries are planned to begin in the first quarter of next year, starting with pharmacy partners.",
-            "location": {
-              "kind": "docx",
-              "heading_path": [
-                "Product Updates",
-                "Delivery drone D-2"
-              ],
-              "pdf_page_start": null,
-              "pdf_page_end": null,
-              "printed_page_start": null,
-              "printed_page_end": null
-            },
-            "children": []
-          }
-        ]
+        "children": []
       },
       {
         "id": "4",
         "title": "Risks and Outlook",
         "level": 1,
         "origin": "original",
-        "summary": "This parent section has no text of its own and groups three subsections: supply chain risk (battery cell sourcing from two suppliers, with a third being qualified to reduce shortage risk), regulatory risk (country-by-country drone rules and possible flight-altitude limit changes that could delay the D-2 launch in some markets), and the Q4 outlook (revenue guidance of $44 million to $47 million and expected operating-level profitability). Use it for questions about battery supplier count, shortage mitigation, regulatory threats to the D-2 timeline, or Q4 revenue and profit guidance. No tables or images are included.",
-        "text": "",
+        "summary": "Covers the company's main risks and its Q4 guidance. Supply risk centers on battery cells, which come from two suppliers, with a third being qualified to reduce shortage risk. Regulatory risk comes from country-specific drone rules, and possible flight-altitude limit changes could delay the D-2 launch in some markets. It also gives Q4 guidance of 44 to 47 million dollars in revenue and continued operating-level profitability. Use it to answer questions about supply chain, regulatory, or Q4 outlook; there are no tables or images.",
+        "summary_source": "llm",
+        "text": "Supply chain\nBattery cells remain the main supply risk. Nimbus buys from two suppliers and is qualifying a third to lower the chance of a shortage.\n\nRegulation\nDrone rules differ by country, and a change to flight-altitude limits could delay the D-2 launch in some markets.\n\nGuidance for Q4\nThe company expects Q4 revenue between 44 and 47 million dollars and expects to stay profitable at the operating level.",
         "location": {
           "kind": "docx",
           "heading_path": [
@@ -256,72 +170,26 @@
           "pdf_page_start": null,
           "pdf_page_end": null,
           "printed_page_start": null,
-          "printed_page_end": null
+          "printed_page_end": null,
+          "covers": [
+            "Supply chain",
+            "Regulation",
+            "Guidance for Q4"
+          ]
         },
-        "children": [
-          {
-            "id": "4.1",
-            "title": "Supply chain",
-            "level": 2,
-            "origin": "original",
-            "summary": "Covers Nimbus's supply chain risk, focusing on battery cells as the main supply risk. Nimbus currently buys cells from two suppliers and is qualifying a third to reduce the chance of a shortage. Useful for questions about battery sourcing, supplier count, or mitigation plans for shortages. No tables or images.",
-            "text": "Battery cells remain the main supply risk. Nimbus buys from two suppliers and is qualifying a third to lower the chance of a shortage.",
-            "location": {
-              "kind": "docx",
-              "heading_path": [
-                "Risks and Outlook",
-                "Supply chain"
-              ],
-              "pdf_page_start": null,
-              "pdf_page_end": null,
-              "printed_page_start": null,
-              "printed_page_end": null
-            },
-            "children": []
-          },
-          {
-            "id": "4.2",
-            "title": "Regulation",
-            "level": 2,
-            "origin": "original",
-            "summary": "Notes that drone regulations vary by country and that changes to flight-altitude limits could delay the D-2 launch in some markets. Useful for questions about regulatory risks to the D-2 launch timeline or how altitude rules affect market availability. The section is brief, has no subsections, and contains no tables or images.",
-            "text": "Drone rules differ by country, and a change to flight-altitude limits could delay the D-2 launch in some markets.",
-            "location": {
-              "kind": "docx",
-              "heading_path": [
-                "Risks and Outlook",
-                "Regulation"
-              ],
-              "pdf_page_start": null,
-              "pdf_page_end": null,
-              "printed_page_start": null,
-              "printed_page_end": null
-            },
-            "children": []
-          },
-          {
-            "id": "4.3",
-            "title": "Guidance for Q4",
-            "level": 2,
-            "origin": "original",
-            "summary": "States the company's Q4 outlook: revenue is expected to be between $44 million and $47 million, and the company expects to remain profitable at the operating level. Use this section to answer questions about Q4 revenue guidance or expected operating profitability. It contains no tables or images.",
-            "text": "The company expects Q4 revenue between 44 and 47 million dollars and expects to stay profitable at the operating level.",
-            "location": {
-              "kind": "docx",
-              "heading_path": [
-                "Risks and Outlook",
-                "Guidance for Q4"
-              ],
-              "pdf_page_start": null,
-              "pdf_page_end": null,
-              "printed_page_start": null,
-              "printed_page_end": null
-            },
-            "children": []
-          }
-        ]
+        "children": []
       }
     ]
   },
-  "images": []
+  "images": [],
+  "options": {
+    "split_large": true,
+    "max_leaf_tokens": 2000,
+    "small_sections": "merge",
+    "min_leaf_tokens": 150,
+    "summaries": "llm",
+    "summary_length": "detailed",
+    "preview_sentences": 3,
+    "describe_images": true
+  }
 }
