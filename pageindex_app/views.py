@@ -3,8 +3,8 @@
 import reflex as rx
 
 from .runtime import settings
-from .state import UPLOAD_ID, State
-from .viewmodels import ChatMessage, CitationView, DocView, ImageView, OutlineRowView, StepView
+from .state import MAX_LEAF_CHOICES, MIN_LEAF_CHOICES, UPLOAD_ID, State
+from .viewmodels import ChatMessage, CitationView, DocView, ImageView, OutlineRowView, PresetView, StepView
 
 EXAMPLES = [
     "Who is the commander of Meridian Station, and what shift do they work?",
@@ -73,7 +73,7 @@ def key_card() -> rx.Component:
             ),
             rx.cond(State.key_error != "", rx.text(State.key_error, size="2", color_scheme="red")),
             rx.text(
-                "Needed to chat and to add documents. It stays in this session's server memory only: never "
+                "Needed to chat, and to index with Claude summaries. It stays in this session's server memory only: never "
                 "saved to disk or logged, and sent only to Anthropic.",
                 **MUTED,
             ),
@@ -151,35 +151,152 @@ def upload_form() -> rx.Component:
             max_files=1,
             max_size=settings.max_upload_bytes,
             multiple=False,
-            disabled=~State.key_set,
             padding="1em",
             border="1px dashed var(--gray-7)",
             border_radius="12px",
             background="var(--gray-2)",
             width="100%",
-            opacity=rx.cond(State.key_set, "1", "0.5"),
         ),
         rx.text(rx.selected_files(UPLOAD_ID), size="1"),
         rx.button(
             "Upload",
             on_click=State.handle_upload(rx.upload_files(upload_id=UPLOAD_ID)),
             loading=State.building,
-            disabled=~State.key_set,
             width="100%",
             **PRIMARY,
         ),
-        rx.cond(~State.key_set, rx.text("Add your API key first.", **MUTED)),
+        rx.text("You choose how to index it (and see the cost) before anything is spent.", **MUTED),
         spacing="2",
         width="100%",
+    )
+
+
+def preset_option(choice: PresetView) -> rx.Component:
+    chosen = State.preset == choice.name
+    return rx.box(
+        rx.hstack(
+            rx.text(choice.label, size="2", weight="bold"),
+            rx.text(choice.description, size="1", color_scheme="gray"),
+            align="baseline",
+            wrap="wrap",
+            spacing="2",
+        ),
+        rx.text(choice.cost, size="1"),
+        on_click=State.set_preset(choice.name),
+        cursor="pointer",
+        width="100%",
+        padding="0.5em 0.7em",
+        border_radius="10px",
+        # The border width never changes (only its colour); the extra ring is a shadow, which takes no space.
+        # A 1px -> 2px border would resize the cards and shift the whole panel on every selection.
+        border=rx.cond(chosen, "1px solid var(--accent-9)", BORDER),
+        box_shadow=rx.cond(chosen, "0 0 0 1px var(--accent-9)", "none"),
+        background=rx.cond(chosen, "var(--accent-2)", "transparent"),
+        custom_attrs={"role": "radio", "aria-checked": rx.cond(chosen, "true", "false"), "data-preset": choice.name},
+    )
+
+
+def option_row(label: str, control: rx.Component) -> rx.Component:
+    return rx.hstack(rx.text(label, size="1", flex="1"), control, align="center", width="100%")
+
+
+def choice_select(items: list[tuple[str, str]], value: rx.Var, on_change, **props) -> rx.Component:
+    """A small select whose items show a label but send a value."""
+    return rx.select.root(
+        rx.select.trigger(min_width="9em"),
+        rx.select.content(*[rx.select.item(label, value=item) for item, label in items]),
+        value=value,
+        on_change=on_change,
+        size="1",
+        **props,
+    )
+
+
+def advanced_options() -> rx.Component:
+    return rx.vstack(
+        option_row(
+            "Split sections too big to read in one go",
+            rx.switch(checked=State.opt_split, on_change=State.set_opt_split, size="1"),
+        ),
+        option_row(
+            "Largest section before splitting",
+            choice_select([(c, f"{c} tokens") for c in MAX_LEAF_CHOICES], State.opt_max_leaf, State.set_opt_max_leaf),
+        ),
+        option_row(
+            "Small sections",
+            choice_select(
+                [("off", "Keep as they are"), ("merge", "Merge tiny ones"), ("fold", "Merge and fold")],
+                State.opt_small,
+                State.set_opt_small,
+            ),
+        ),
+        option_row(
+            "Tiny means under",
+            choice_select([(c, f"{c} tokens") for c in MIN_LEAF_CHOICES], State.opt_min_leaf, State.set_opt_min_leaf),
+        ),
+        option_row(
+            "Section summaries",
+            choice_select(
+                [("llm", "Claude summaries"), ("preview", "Free previews")], State.opt_summaries, State.set_opt_summaries
+            ),
+        ),
+        option_row(
+            "Summary length",
+            choice_select(
+                [("short", "Short"), ("detailed", "Detailed")],
+                State.opt_summary_length,
+                State.set_opt_summary_length,
+                disabled=State.opt_summaries == "preview",
+            ),
+        ),
+        option_row(
+            "Describe images with Claude",
+            rx.switch(checked=State.opt_images, on_change=State.set_opt_images, size="1"),
+        ),
+        rx.text(
+            "Merging joins runs of tiny sibling sections and sections with a single subsection. Folding also turns "
+            "any part of the outline small enough to read in one go into one section. Original headings are kept.",
+            **MUTED,
+        ),
+        spacing="2",
+        width="100%",
+        padding="0.6em",
+        border=BORDER,
+        border_radius="10px",
     )
 
 
 def pending_view() -> rx.Component:
     return rx.vstack(
         rx.text(State.pending_name, weight="medium", size="2", word_break="break-word"),
-        rx.text(State.pending_detail, size="2"),
+        rx.vstack(
+            rx.foreach(State.preset_choices, preset_option),
+            spacing="2",
+            width="100%",
+            custom_attrs={"role": "radiogroup"},
+        ),
+        rx.button(
+            rx.cond(State.show_advanced, rx.icon("chevron-down", size=14), rx.icon("chevron-right", size=14)),
+            rx.cond(State.preset == "custom", "Advanced options (custom)", "Advanced options"),
+            variant="ghost",
+            size="1",
+            color_scheme="gray",
+            on_click=State.toggle_advanced,
+        ),
+        rx.cond(State.show_advanced, advanced_options()),
+        rx.text(State.pending_detail, size="2", id="pending-detail"),
+        rx.cond(
+            State.needs_key_to_index & ~State.key_set,
+            rx.text("These options use Claude: add your API key above, or pick Free.", size="1", color_scheme="amber"),
+        ),
         rx.hstack(
-            rx.button("Index it", on_click=State.confirm_index, **PRIMARY),
+            rx.button(
+                "Index it",
+                on_click=State.confirm_index,
+                loading=State.rebuilding,
+                disabled=State.needs_key_to_index & ~State.key_set,
+                **PRIMARY,
+            ),
             rx.button("Cancel", variant="soft", color_scheme="gray", on_click=State.cancel_pending),
         ),
         spacing="2",
@@ -190,7 +307,7 @@ def pending_view() -> rx.Component:
 
 def indexing_view() -> rx.Component:
     return rx.vstack(
-        rx.text("Indexing with your key...", size="2", weight="medium"),
+        rx.text(rx.cond(State.needs_key_to_index, "Indexing with your key...", "Indexing..."), size="2", weight="medium"),
         rx.progress(value=State.index_percent, max=100, width="100%"),
         rx.text(f"{State.index_done} of {State.index_total}: {State.index_label}", **MUTED),
         spacing="2",
@@ -261,7 +378,12 @@ def assistant_message(message: ChatMessage) -> rx.Component:
             message.pending & (message.text == ""),
             rx.hstack(rx.spinner(size="1"), rx.text("Working...", size="2", color_scheme="gray"), align="center"),
         ),
-        rx.cond(message.text != "", rx.cond(message.found, prose(text=message.text), rx.text(message.text, color_scheme="gray"))),
+        rx.cond(
+            message.text != "",
+            # Uncited replies (no answer found, errors, or questions about the outline itself) are grey, but
+            # still Markdown: a reply about the table of contents can be a real, formatted answer.
+            rx.cond(message.found, prose(text=message.text), rx.box(prose(text=message.text), color="var(--gray-11)")),
+        ),
         rx.foreach(message.images, answer_image),
         rx.cond(
             message.citations.length() > 0,
@@ -398,7 +520,27 @@ def chat_panel() -> rx.Component:
             width="100%",
             min_height="0",
         ),
-        rx.box(composer(), padding="0.5em 1.25em 1.25em", width="100%"),
+        rx.box(
+            composer(),
+            rx.hstack(
+                rx.text("Outline levels per look:", **MUTED),
+                rx.select(
+                    ["1", "2", "3"],
+                    value=State.listing_depth,
+                    on_change=State.set_listing_depth,
+                    size="1",
+                    variant="ghost",
+                ),
+                rx.text("More levels means fewer agent steps to reach a section.", **MUTED),
+                align="center",
+                spacing="2",
+                padding_top="0.3em",
+                padding_left="0.9em",
+                wrap="wrap",
+            ),
+            padding="0.5em 1.25em 1.25em",
+            width="100%",
+        ),
         spacing="0",
         height=["80vh", "80vh", "100%"],
         min_height="420px",

@@ -1,7 +1,7 @@
 """Indexing in two stages, so a visitor can see the cost before any LLM call is made.
 
-build_index: extract, build the tree, split large nodes, save images. No LLM, no cost.
-enrich_index: image descriptions and section summaries. These are the LLM calls.
+build_index: extract, build the tree, refine it (merge/fold/split), save images, fill free previews. No LLM, no cost.
+enrich_index: image descriptions and section summaries, as the options ask. These are the LLM calls.
 """
 
 import hashlib
@@ -11,13 +11,15 @@ from collections.abc import Callable
 from pathlib import Path
 
 from ..config import Settings
-from ..models import DocumentIndex, FileKind, ImageRecord, TocEntry
+from ..models import DocumentIndex, FileKind, ImageRecord, IndexOptions, TocEntry
 from ..storage import Store
 from .blocks import IMAGE_REF, Block, Heading
 from .docx_extract import extract_docx
 from .estimate import estimate_index
 from .markdown_extract import extract_markdown
-from .split import split_large_nodes
+from .options import preset_options
+from .preview import fill_previews
+from .refine import refine_tree
 from .tree import build_tree
 
 OnProgress = Callable[[int, int, str], None]  # done, total, what just finished
@@ -33,15 +35,23 @@ _MIME_TYPES = {
 }
 
 
-def build_index(path: Path | str, store: Store, settings: Settings) -> DocumentIndex:
-    """Extract structure and content. Images are written to the store; nothing is saved as an index yet."""
+def build_index(
+    path: Path | str, store: Store, settings: Settings, options: IndexOptions | None = None
+) -> DocumentIndex:
+    """Extract structure and content. Images are written to the store; nothing is saved as an index yet.
+
+    Without options, the default preset is used.
+    """
     path = Path(path)
+    options = options or preset_options(settings=settings)
     kind, blocks = _extract(path)
     doc_id = make_doc_id(path)
 
     root, raw_images = build_tree(blocks, title=path.stem, kind=kind)
     source_toc = [TocEntry(title=b.title, level=b.level) for b in blocks if isinstance(b, Heading)] or None
-    split_large_nodes(root, settings.max_leaf_tokens)
+    refine_tree(root, options)
+    if options.summaries == "preview":
+        fill_previews(root, options.preview_sentences)
 
     images = [
         ImageRecord(
@@ -60,6 +70,8 @@ def build_index(path: Path | str, store: Store, settings: Settings) -> DocumentI
         source_toc=source_toc,
         root=root,
         images=images,
+        summary=root.summary,
+        options=options,
     )
     _assign_image_nodes(index)
     return index
@@ -71,12 +83,18 @@ def enrich_index(
     settings: Settings,
     api_key: str | None = None,
     on_progress: OnProgress | None = None,
+    options: IndexOptions | None = None,
 ) -> None:
-    """Describe images and summarize every section, in place. Raises if an LLM call fails."""
-    from ..llm import chat_model
-    from .summarize import describe_images, summarize_tree
+    """Describe images and summarize every section, in place, as far as the options ask. Raises if an LLM call fails.
 
-    total = estimate_index(index, store).calls
+    Options default to the ones the index was built with.
+    """
+    from ..llm import chat_model
+    from .summarize import SUMMARY_MAX_TOKENS, describe_images, summarize_tree
+
+    options = options or index.options or preset_options(settings=settings)
+    index.options = options
+    total = estimate_index(index, store, options).calls
     done = 0
     lock = threading.Lock()  # steps finish on worker threads
 
@@ -87,15 +105,24 @@ def enrich_index(
             if on_progress:
                 on_progress(done, total, label)
 
-    describe_images(
-        index.images,
-        store.doc_dir(index.doc_id),
-        chat_model(settings.vision_model, api_key),
-        settings.index_workers,
-        on_step,
-    )
-    summarize_tree(index.root, chat_model(settings.index_model, api_key), index.images, settings.index_workers, on_step)
-    index.summary = index.root.summary
+    if options.describe_images:
+        describe_images(
+            index.images,
+            store.doc_dir(index.doc_id),
+            chat_model(settings.vision_model, api_key),
+            settings.index_workers,
+            on_step,
+        )
+    if options.summaries == "llm":
+        summarize_tree(
+            index.root,
+            chat_model(settings.index_model, api_key, max_tokens=SUMMARY_MAX_TOKENS[options.summary_length]),
+            index.images,
+            settings.index_workers,
+            on_step,
+            length=options.summary_length,
+        )
+        index.summary = index.root.summary
 
 
 def index_document(
@@ -105,11 +132,18 @@ def index_document(
     use_llm: bool = True,
     api_key: str | None = None,
     on_progress: OnProgress | None = None,
+    options: IndexOptions | None = None,
 ) -> DocumentIndex:
-    """Index one file and save it. With use_llm=False, no summaries or image descriptions are made."""
-    index = build_index(path, store, settings)
-    if use_llm:
-        enrich_index(index, store, settings, api_key, on_progress)
+    """Index one file and save it.
+
+    With use_llm=False, no LLM call is made: sections get free previews instead of summaries.
+    """
+    options = options or preset_options(settings=settings)
+    if not use_llm:
+        options = options.model_copy(update={"summaries": "preview", "describe_images": False})
+    index = build_index(path, store, settings, options)
+    if options.uses_llm:
+        enrich_index(index, store, settings, api_key, on_progress, options)
     store.save_index(index)
     return index
 

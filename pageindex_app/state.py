@@ -5,6 +5,7 @@ Helper methods start with an underscore so Reflex does not turn them into events
 
 import asyncio
 import dataclasses
+import itertools
 import logging
 import time
 from pathlib import Path
@@ -13,23 +14,28 @@ from typing import Any
 import reflex as rx
 from pageindex_rag.agent import AnswerResult, ChatTurn, Draft, Step, stream_ask
 from pageindex_rag.errors import friendly_error
-from pageindex_rag.indexing import build_index, enrich_index, estimate_index
+from pageindex_rag.indexing import DEFAULT_PRESET, PRESET_NAMES, Estimate, build_index, enrich_index, estimate_index
+from pageindex_rag.indexing.estimate import count_describable_images
+from pageindex_rag.indexing.options import PRESET_DESCRIPTIONS, PRESET_LABELS, matching_preset, preset_options
 from pageindex_rag.indexing.pipeline import make_doc_id
 from pageindex_rag.library import SAMPLE_SCOPE, Library
 from pageindex_rag.llm import validate_key
-from pageindex_rag.models import DocumentIndex
+from pageindex_rag.models import DocumentIndex, IndexOptions
 from pageindex_rag.outline import node_markdown, outline_rows
 from pageindex_rag.sessions import describe_duration
 from pageindex_rag.uploads import UploadError, safe_filename, validate_upload
 
 from .runtime import sessions, settings
-from .viewmodels import ChatMessage, CitationView, DocView, ImageView, OutlineRowView, StepView
+from .viewmodels import ChatMessage, CitationView, DocView, ImageView, OutlineRowView, PresetView, StepView
 
 log = logging.getLogger(__name__)
 
 UPLOAD_ID = "doc_upload"
 MAX_HISTORY_TURNS = 6  # earlier question/answer pairs the agent gets as context
 DRAFT_INTERVAL = 0.08  # seconds between streamed-text updates sent to the browser
+TREE_OPTIONS = ("split_large", "max_leaf_tokens", "small_sections", "min_leaf_tokens")  # changing these rebuilds the tree
+MAX_LEAF_CHOICES = sorted({"500", "1000", "2000", "4000", str(settings.max_leaf_tokens)}, key=int)
+MIN_LEAF_CHOICES = sorted({"0", "50", "100", "150", "300", str(settings.min_leaf_tokens)}, key=int)
 
 
 def image_url(scope: str, doc_id: str, relative: str) -> str:
@@ -68,6 +74,21 @@ class State(rx.State):
     has_pending: bool = False
     pending_name: str = ""
     pending_detail: str = ""
+    rebuilding: bool = False
+    # Indexing options, as plain values (see IndexOptions). The preset is "custom" once they match none.
+    preset: str = DEFAULT_PRESET
+    preset_choices: list[PresetView] = []
+    # Estimates for every combination of the LLM options on the pending tree, worked out once per tree,
+    # so choosing a preset or a summary option never touches the disk. Keyed by _estimate_key.
+    _estimates: dict[str, dict[str, int]] = {}
+    show_advanced: bool = False
+    opt_split: bool = True
+    opt_max_leaf: str = str(settings.max_leaf_tokens)
+    opt_small: str = "merge"
+    opt_min_leaf: str = str(settings.min_leaf_tokens)
+    opt_summaries: str = "llm"
+    opt_summary_length: str = "detailed"
+    opt_images: bool = True
     indexing: bool = False
     index_done: int = 0
     index_total: int = 0
@@ -83,6 +104,8 @@ class State(rx.State):
     browse_title: str = ""
     browse_rows: list[OutlineRowView] = []
 
+    listing_depth: str = str(settings.agent_listing_depth)  # tree levels one agent listing shows
+
     # ---- derived ----
 
     @rx.var
@@ -96,6 +119,10 @@ class State(rx.State):
     @rx.var
     def own_doc_count(self) -> int:
         return sum(1 for doc in self.docs if not doc.sample)
+
+    @rx.var
+    def needs_key_to_index(self) -> bool:
+        return self.opt_summaries == "llm" or self.opt_images
 
     # ---- helpers ----
 
@@ -127,6 +154,109 @@ class State(rx.State):
         self.has_pending = False
         self.pending_name = ""
         self.pending_detail = ""
+        self.preset_choices = []
+        self._estimates = {}
+
+    def _restore_pending(self) -> None:
+        """Bring back an upload that was waiting for "Index it" when the state was lost (e.g. a server restart).
+
+        The waiting index is on disk, so nothing needs to be uploaded again. Its options come back with it.
+        """
+        token = self._token()
+        if self.has_pending or self.indexing or self.building or not token:
+            return
+        try:
+            path = pending_path(token)
+            if not path.is_file():
+                return
+            index = DocumentIndex.model_validate_json(path.read_text(encoding="utf-8"))
+            if not (sessions.uploads_dir(token) / index.source_path).is_file():
+                return
+        except Exception:
+            log.exception("Could not restore a pending document")
+            return
+        self._pending_id = index.doc_id
+        self._pending_file = index.source_path
+        self.has_pending = True
+        self.pending_name = index.title
+        if index.options:
+            options = index.options
+            self.opt_split = options.split_large
+            self.opt_max_leaf = str(options.max_leaf_tokens)
+            self.opt_small = options.small_sections
+            self.opt_min_leaf = str(options.min_leaf_tokens)
+            self.opt_summaries = options.summaries
+            self.opt_summary_length = options.summary_length
+            self.opt_images = options.describe_images
+        self._cache_estimates(index)
+
+    def _options(self) -> IndexOptions:
+        return IndexOptions(
+            split_large=self.opt_split,
+            max_leaf_tokens=int(self.opt_max_leaf),
+            small_sections=self.opt_small,
+            min_leaf_tokens=int(self.opt_min_leaf),
+            summaries=self.opt_summaries,
+            summary_length=self.opt_summary_length,
+            describe_images=self.opt_images,
+        )
+
+    def _load_pending(self) -> DocumentIndex:
+        return DocumentIndex.model_validate_json(pending_path(self._token()).read_text(encoding="utf-8"))
+
+    def _cache_estimates(self, index: DocumentIndex) -> None:
+        """Work out the cost of every LLM option combination on this tree (images are opened once), then show it."""
+        store = sessions.store(self._token())
+        tree = self._options().model_dump(include=set(TREE_OPTIONS))
+        images = count_describable_images(index, store)
+        cache = {}
+        for summaries, length, describe in itertools.product(("llm", "preview"), ("short", "detailed"), (True, False)):
+            options = IndexOptions(**tree, summaries=summaries, summary_length=length, describe_images=describe)
+            cache[_estimate_key(options)] = dataclasses.asdict(estimate_index(index, store, options, images))
+        self._estimates = cache
+        self._show_estimates()
+
+    def _show_estimates(self) -> None:
+        """The cost of each preset, and of the options chosen now, from the cache."""
+        if not self._estimates:
+            return
+        options = self._options()
+
+        def estimate(opts: IndexOptions) -> Estimate:
+            return Estimate(**self._estimates[_estimate_key(opts)])
+
+        self.preset_choices = [
+            PresetView(name, PRESET_LABELS[name], PRESET_DESCRIPTIONS[name], _cost_text(estimate(preset_options(name, settings))))
+            for name in PRESET_NAMES
+        ]
+        current = estimate(options)
+        self.preset = matching_preset(options) or "custom"
+        images = f"{current.images} image{'' if current.images == 1 else 's'} to describe"
+        self.pending_detail = f"{current.sections} sections, {images}. {_cost_text(current)}"
+
+    async def _options_changed(self, tree_changed: bool):
+        """Refresh the estimates; rebuild the pending tree first when a tree option changed (free, no LLM)."""
+        self.preset = matching_preset(self._options()) or "custom"
+        if not self.has_pending:
+            return
+        if not tree_changed:
+            self._show_estimates()  # summary and image options only change the cost, which is cached
+            return
+        index = self._load_pending()
+        if index.options != self._options():
+            self.rebuilding = True
+            yield
+            try:
+                path = sessions.uploads_dir(self._token()) / self._pending_file
+                index = await asyncio.to_thread(build_index, path, sessions.store(self._token()), settings, self._options())
+                pending_path(self._token()).write_text(index.model_dump_json(), encoding="utf-8")
+                self.upload_error = ""
+            except Exception:
+                log.exception("Rebuilding a pending document failed")
+                self.upload_error = "Could not apply those options to this document."
+            finally:
+                self.rebuilding = False
+        self._cache_estimates(index)
 
     def _replace_last(self, **changes: Any) -> None:
         self.messages = [*self.messages[:-1], dataclasses.replace(self.messages[-1], **changes)]
@@ -135,6 +265,7 @@ class State(rx.State):
 
     @rx.event
     def on_load(self):
+        self._restore_pending()
         self._refresh()
 
     @rx.event
@@ -183,9 +314,6 @@ class State(rx.State):
     @rx.event
     async def handle_upload(self, files: list[rx.UploadFile]):
         self.upload_error = ""
-        if not self.key_set:
-            self.upload_error = "Add your Anthropic API key first. Indexing uses it."
-            return
         if self.building or self.indexing or self.has_pending:
             return
         if not files:
@@ -225,8 +353,7 @@ class State(rx.State):
                 self.upload_error = "That document is already in your library."
                 return
             store = sessions.store(token)
-            index = await asyncio.to_thread(build_index, path, store, settings)
-            estimate = estimate_index(index, store)
+            index = await asyncio.to_thread(build_index, path, store, settings, self._options())
         except Exception:
             log.exception("Reading an uploaded document failed")
             self.upload_error = "Could not read that document. It may be damaged or use unsupported features."
@@ -239,13 +366,73 @@ class State(rx.State):
         self._pending_file = name
         self.has_pending = True
         self.pending_name = index.title
-        self.pending_detail = (
-            f"{estimate.sections} sections and {estimate.images} images to describe. Indexing makes about "
-            f"{estimate.calls} Claude calls on your key (roughly {estimate.input_tokens:,} input and "
-            f"{estimate.output_tokens:,} output tokens)."
-        )
+        self._cache_estimates(index)
         self._refresh()
         yield rx.clear_selected_files(UPLOAD_ID)
+
+    # ---- indexing options ----
+
+    @rx.event
+    def set_preset(self, name: str):
+        if name not in PRESET_NAMES:
+            return
+        chosen = preset_options(name, settings)
+        self.opt_summaries = chosen.summaries
+        self.opt_summary_length = chosen.summary_length
+        self.opt_images = chosen.describe_images
+        self.preset = name
+        self._show_estimates()
+
+    @rx.event
+    def toggle_advanced(self):
+        self.show_advanced = not self.show_advanced
+
+    @rx.event
+    async def set_opt_split(self, value: bool):
+        self.opt_split = bool(value)
+        async for update in self._options_changed(tree_changed=True):
+            yield update
+
+    @rx.event
+    async def set_opt_max_leaf(self, value: str):
+        if value in MAX_LEAF_CHOICES:
+            self.opt_max_leaf = value
+            async for update in self._options_changed(tree_changed=True):
+                yield update
+
+    @rx.event
+    async def set_opt_small(self, value: str):
+        if value in ("off", "merge", "fold"):
+            self.opt_small = value
+            async for update in self._options_changed(tree_changed=True):
+                yield update
+
+    @rx.event
+    async def set_opt_min_leaf(self, value: str):
+        if value in MIN_LEAF_CHOICES:
+            self.opt_min_leaf = value
+            async for update in self._options_changed(tree_changed=True):
+                yield update
+
+    @rx.event
+    async def set_opt_summaries(self, value: str):
+        if value in ("llm", "preview"):
+            self.opt_summaries = value
+            async for update in self._options_changed(tree_changed=False):
+                yield update
+
+    @rx.event
+    async def set_opt_summary_length(self, value: str):
+        if value in ("short", "detailed"):
+            self.opt_summary_length = value
+            async for update in self._options_changed(tree_changed=False):
+                yield update
+
+    @rx.event
+    async def set_opt_images(self, value: bool):
+        self.opt_images = bool(value)
+        async for update in self._options_changed(tree_changed=False):
+            yield update
 
     @rx.event
     def cancel_pending(self):
@@ -255,11 +442,16 @@ class State(rx.State):
     @rx.event(background=True)
     async def confirm_index(self):
         async with self:
-            if not self._pending_id or self.indexing:
+            if not self._pending_id or self.indexing or self.rebuilding:
+                return
+            options = self._options()
+            if options.uses_llm and not self.key_set:
+                self.upload_error = "Add your Anthropic API key first, or choose the Free preset (it needs no key)."
                 return
             key, token = self._api_key, self._token()
-            index = DocumentIndex.model_validate_json(pending_path(token).read_text(encoding="utf-8"))
-            total = estimate_index(index, sessions.store(token)).calls
+            source = sessions.uploads_dir(token) / self._pending_file
+            index = self._load_pending()
+            total = estimate_index(index, sessions.store(token), options).calls
             self.indexing = True
             self.upload_error = ""
             self.index_done = 0
@@ -272,15 +464,22 @@ class State(rx.State):
         def on_progress(done: int, total: int, label: str) -> None:  # runs on worker threads
             progress.update(done=done, total=total, label=label)
 
-        work = asyncio.create_task(asyncio.to_thread(enrich_index, index, store, settings, key, on_progress))
+        def run(index: DocumentIndex) -> DocumentIndex:
+            if index.options != options:  # e.g. switched between previews and summaries after the upload
+                index = build_index(source, store, settings, options)
+            if options.uses_llm:
+                enrich_index(index, store, settings, key, on_progress, options)
+            store.save_index(index)
+            return index
+
+        work = asyncio.create_task(asyncio.to_thread(run, index))
         error = ""
         try:
             while not work.done():
                 await asyncio.wait({work}, timeout=0.4)
                 async with self:
                     self.index_done, self.index_total, self.index_label = progress["done"], progress["total"], progress["label"]
-            work.result()  # raises if an LLM call failed
-            await asyncio.to_thread(store.save_index, index)
+            index = work.result()  # raises if an LLM call failed
         except Exception as exc:
             error = friendly_error(exc)
             if not isinstance(exc, (OSError, ValueError)):
@@ -342,6 +541,11 @@ class State(rx.State):
     def set_browse_open(self, value: bool):
         self.browse_open = value
 
+    @rx.event
+    def set_listing_depth(self, value: str):
+        if value in ("1", "2", "3"):
+            self.listing_depth = value
+
     # ---- chat ----
 
     @rx.event
@@ -357,10 +561,11 @@ class State(rx.State):
             if self.thinking or not self.key_set:
                 return
             key, token = self._api_key, self._token()
+            chat_settings = dataclasses.replace(settings, agent_listing_depth=int(self.listing_depth))
             history = [
                 ChatTurn(role=m.role, content=m.text)
                 for m in self.messages
-                if m.text and not m.pending and (m.role == "user" or m.found)
+                if m.text and not m.pending and (m.role == "user" or not m.error)
             ][-MAX_HISTORY_TURNS * 2 :]
             self.thinking = True
             self.messages = [*self.messages, ChatMessage(role="user", text=question), ChatMessage(role="assistant", pending=True)]
@@ -371,7 +576,7 @@ class State(rx.State):
             indexes = library.indexes()
             if not indexes:
                 raise EmptyLibrary
-            events = stream_ask(indexes, question, settings, history, api_key=key)
+            events = stream_ask(indexes, question, chat_settings, history, api_key=key)
             last_draft = 0.0
             while (event := await asyncio.to_thread(next, events, None)) is not None:
                 if isinstance(event, Step):
@@ -391,12 +596,12 @@ class State(rx.State):
                 yield scroll_chat()
         except EmptyLibrary:
             async with self:
-                self._replace_last(text="There are no documents to search yet.", found=False, pending=False)
+                self._replace_last(text="There are no documents to search yet.", found=False, error=True, pending=False)
         except Exception as exc:
             if not isinstance(exc, (OSError, ValueError)):
                 log.warning("Answering failed: %s", type(exc).__name__)
             async with self:
-                self._replace_last(text=friendly_error(exc), found=False, pending=False)
+                self._replace_last(text=friendly_error(exc), found=False, error=True, pending=False)
         finally:
             async with self:
                 self.thinking = False
@@ -409,11 +614,26 @@ class EmptyLibrary(Exception):
     """There is nothing to search."""
 
 
+def _estimate_key(options: IndexOptions) -> str:
+    return f"{options.summaries}|{options.summary_length}|{options.describe_images}"
+
+
+def _cost_text(estimate: Estimate) -> str:
+    if not estimate.calls:
+        return "No Claude calls: free, and no API key needed."
+    return (
+        f"About {estimate.calls} Claude calls on your key (roughly {estimate.input_tokens:,} input and "
+        f"{estimate.output_tokens:,} output tokens)."
+    )
+
+
 def _where(title: str, location: str) -> str:
-    """The location without the section's own title, which the chip already shows ("Crew > Roster" -> "Crew")."""
-    if location == title:
-        return ""
-    return location.removesuffix(f" > {title}")
+    """The location without the section's own title, which the chip already shows.
+
+    "Crew > Roster" -> "Crew" for the section Roster; "Crew > Captain, Deputy" -> "Captain, Deputy"
+    for the section Crew that small sections were folded into.
+    """
+    return " > ".join(part for part in location.split(" > ") if part != title)
 
 
 def _answer_fields(result: AnswerResult, library: Library, token: str) -> dict[str, Any]:
@@ -425,6 +645,7 @@ def _answer_fields(result: AnswerResult, library: Library, token: str) -> dict[s
     return {
         "text": result.text,
         "found": result.found,
+        "error": result.error,
         "pending": False,
         "citations": [
             CitationView(f"{c.doc_id}:{c.node_id}", c.doc_title, c.title, _where(c.title, c.location))

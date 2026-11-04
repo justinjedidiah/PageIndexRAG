@@ -19,13 +19,18 @@ class Location(BaseModel):
     pdf_page_end: int | None = None
     printed_page_start: str | None = None  # page label as printed on the page
     printed_page_end: str | None = None
+    covers: list[str] = Field(default_factory=list)  # titles of small sections merged or folded into this node
 
     def label(self) -> str:
         if self.kind == "pdf" and self.printed_page_start:
             if self.printed_page_end and self.printed_page_end != self.printed_page_start:
                 return f"pp. {self.printed_page_start}-{self.printed_page_end}"
             return f"p. {self.printed_page_start}"
-        return " > ".join(self.heading_path) or "(document start)"
+        path = " > ".join(self.heading_path)
+        if self.covers:
+            covered = ", ".join(self.covers)
+            return f"{path} > {covered}" if path else covered
+        return path or "(document start)"
 
 
 class Node(BaseModel):
@@ -34,6 +39,7 @@ class Node(BaseModel):
     level: int
     origin: Literal["original", "generated"] = "original"
     summary: str = ""
+    summary_source: Literal["", "llm", "preview"] = ""  # "preview" = the first sentences of the text, no LLM
     text: str = ""  # content directly under this node, before its first child
     location: Location
     children: list[Node] = Field(default_factory=list)
@@ -54,6 +60,26 @@ class ImageRecord(BaseModel):
     tags: list[str] = Field(default_factory=list)
 
 
+class IndexOptions(BaseModel):
+    """What indexing does to a document. Tree changes are free; summaries and image descriptions use the LLM.
+
+    Presets that bundle these live in `indexing/options.py`.
+    """
+
+    split_large: bool = True  # split sections too big to read in one go
+    max_leaf_tokens: int = Field(default=2000, ge=1)
+    small_sections: Literal["off", "merge", "fold"] = "merge"  # merge tiny siblings and 1-child chains; fold small subtrees
+    min_leaf_tokens: int = Field(default=150, ge=0)
+    summaries: Literal["llm", "preview"] = "llm"
+    summary_length: Literal["short", "detailed"] = "detailed"  # LLM summaries only
+    preview_sentences: int = Field(default=3, ge=1)
+    describe_images: bool = True
+
+    @property
+    def uses_llm(self) -> bool:
+        return self.summaries == "llm" or self.describe_images
+
+
 class TocEntry(BaseModel):
     """One entry of the source document's own ToC, kept as reference data."""
 
@@ -71,6 +97,7 @@ class DocumentIndex(BaseModel):
     source_toc: list[TocEntry] | None = None
     root: Node
     images: list[ImageRecord] = Field(default_factory=list)
+    options: IndexOptions | None = None  # what was applied; None for indexes made before options existed
 
     def node_map(self) -> dict[str, Node]:
         return {node.id: node for node in self.root.walk()}

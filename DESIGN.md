@@ -23,10 +23,18 @@ A public portfolio web app. Visitors bring their own Anthropic API key (BYOK), u
    - Word: heading styles (Heading 1/2/3) give the tree directly, no LLM.
    - PDF: embedded bookmarks/outline, then a printed ToC page parsed by an LLM, then font/layout heading heuristics, then LLM-generated structure as a last resort.
 2. The original ToC is only a base. Keep it as data in `source_toc`; the navigable tree is our own refined one.
-3. Split large leaves at index time (size threshold in tokens, split on natural boundaries, LLM gives each new sub-node a title and summary). Mark nodes `origin: original | generated`.
-4. Summarize every node, bottom-up (a parent's summary is built from its children's summaries). Summaries should say what questions the section answers.
-5. Tables: extract as Markdown text, keep whole inside their node, mention them in the node summary.
-6. Images: a vision model writes a description and tags at index time. Images with a side under 32 px (icons, rules) are skipped; the test is pixel size, not file size, because a flat-colour chart is a tiny file. Large images are shrunk to 1568 px before sending (API limit is 5 MB).
+3. Refine the tree carefully (`indexing/refine.py`). Each tree level costs the agent one tool call, so the tree should be shallow, and the original ToC changes only where a section breaks a limit. A good ToC comes back unchanged. All of these are free (no LLM) and each can be turned off:
+   - Split a section too big to read in one go (`max_leaf_tokens`, default 2000). Cut at the best boundary: paragraph, then sentence, then a hard cut. A big table is cut between rows with its header repeated. Parts are balanced and an image stays with its paragraph. Parts get a free title from their first sentence (LLM summaries re-title them). A document with no headings becomes one level of parts under the root, never deeper.
+   - Small sections (`small_sections`): `merge` (default) joins runs of tiny sibling leaves (under `min_leaf_tokens`, default 150) into one section titled "A · B · C", and makes a section whose only content is one subsection absorb it ("A › B"). The root only absorbs a lone child that has subsections, so a document always keeps an outline. `fold` also turns any subtree small enough to read in one go into one section. `off` keeps the ToC exactly. Merged and folded titles go in `location.covers`, so citations still name them.
+   - Mark nodes `origin: original | generated`.
+4. Summaries, as the options ask (`IndexOptions`, presets in `indexing/options.py`):
+   - Free: no LLM. Every section shows a preview (its first sentences, plus "Covers: ..." for its subsections). No key needed.
+   - Budget: short LLM summaries (one or two sentences), no image descriptions.
+   - Full (default): detailed LLM summaries, bottom-up (a parent's summary is built from its children's summaries), and image descriptions. Summaries should say what questions the section answers.
+   - The UI shows the cost of each preset before indexing, plus an advanced panel with every single option.
+5. The agent's listing can show 2-3 levels at once (`agent_listing_depth`, default 2; deeper levels show titles only), so it can jump to a deep section without a call per level. This changes nothing in the tree.
+6. Tables: extract as Markdown text, keep whole inside their node (unless a table alone is too big to read in one go), mention them in the node summary.
+7. Images: a vision model writes a description and tags at index time. Images with a side under 32 px (icons, rules) are skipped; the test is pixel size, not file size, because a flat-colour chart is a tiny file. Large images are shrunk to 1568 px before sending (API limit is 5 MB).
 
 ## Data model
 Node: `id`, `title`, `summary`, `text`, `children`, `origin`, `location`.
@@ -60,12 +68,18 @@ Library: a root node whose children are documents, each with a one-paragraph sum
 
 ## Staging
 1. Library-level agent (done)
-2. Reflex app: BYOK key entry, upload and background indexing with cost estimate, chat with live path, citations, source panel, images, sample library (Word/Markdown). Built and verified end to end in real Chrome with an offline fake model (`tests/e2e/run_e2e.py`, 20 checks). Not yet tried with a real Anthropic key. Needs Node 22.22 or newer (Reflex 0.10)
-3. PDF: bookmarks, then printed ToC, then heading heuristics, then LLM-generated structure; page ranges and page-image source view
-4. Session storage, 2-hour expiry sweep, limits, deployment, prompt caching
-5. OCR / scans (later)
+2. Reflex app: BYOK key entry, upload and background indexing with cost estimate, chat with live path, citations, source panel, images, sample library (Word/Markdown). Built and verified end to end in real Chrome with an offline fake model (`tests/e2e/run_e2e.py`, 22 checks). Not yet tried with a real Anthropic key. Needs Node 22.22 or newer (Reflex 0.10)
+3. Tree refinement and indexing options (done): split / merge / fold, presets Free / Budget / Full with live cost estimates, free previews, multi-level agent listings. `samples/index` is rebuilt with it (Full preset, real key).
+4. PDF: bookmarks, then printed ToC, then heading heuristics, then LLM-generated structure; page ranges and page-image source view. LLM-generated ToC (off / only when missing / always) comes with this stage, for Word too.
+5. Session storage, 2-hour expiry sweep, limits, deployment, prompt caching
+6. OCR / scans (later)
+
+## Future work
+- LLM-assisted splitting: an option where the LLM picks topic boundaries inside an oversized section (and titles the parts) instead of size-based cuts.
+- LLM-generated ToC for documents with no ToC or a poor one (see stage 3).
+- Sub-heading detection inside big sections (bold, numbering, font size) before cutting by size.
 
 ## Open questions
-- Size threshold for splitting leaves.
+- Thresholds: max 2000 / min 150 tokens and listing depth 2 are starting defaults; tune them with the eval below.
 - Library layer: grouping when there are many documents; cross-document questions.
 - Eval: compare against a plain vector-RAG baseline on accuracy, tokens, latency.

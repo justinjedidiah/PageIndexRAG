@@ -188,7 +188,7 @@ def test_agent_gives_up_after_step_budget():
     model = ScriptedModel(replies=[call("list_children", node_id="root") for _ in range(3)])
     result = run_agent(LibraryNavigator([make_ships()]), model, "Anything?", max_steps=3)
     assert not result.found
-    assert "budget" in result.text
+    assert "budget" in result.text and result.error
 
 
 def test_agent_not_found():
@@ -224,6 +224,7 @@ def test_agent_unknown_tool_and_bad_arguments_go_back_to_the_model():
     tool_results = [m.content for m in model.seen[-1] if isinstance(m, ToolMessage)]
     assert tool_results == ["Unknown tool 'fly'.", "Invalid arguments for read_node."]
     assert result.text == "Done." and not result.found
+    assert not result.error  # a real reply without citations is not an error: it stays in the history
 
 
 def test_answer_streams_as_growing_drafts_without_markers():
@@ -261,14 +262,14 @@ def test_agent_asks_again_after_an_empty_reply():
         ]
     )
     result = run_agent(LibraryNavigator([make_ships()]), model, "Who?", max_steps=5)
-    assert result.found and result.text == "The captain is Ada."
+    assert result.found and result.text == "The captain is Ada." and not result.error
     assert len(model.seen) == 3  # the empty reply was retried
 
 
 def test_agent_reports_a_reply_that_stays_empty():
     model = ScriptedModel(replies=[AIMessage(""), AIMessage(""), AIMessage("")])
     result = run_agent(LibraryNavigator([make_ships()]), model, "Who?", max_steps=5)
-    assert not result.found and "empty reply" in result.text
+    assert not result.found and "empty reply" in result.text and result.error
 
 
 def test_agent_does_not_retry_a_refusal():
@@ -277,7 +278,7 @@ def test_agent_does_not_retry_a_refusal():
     )
     model = ScriptedModel(replies=[refusal, AIMessage("never reached")])
     result = run_agent(LibraryNavigator([make_ships()]), model, "Who?", max_steps=5)
-    assert not result.found and "declined" in result.text
+    assert not result.found and "declined" in result.text and result.error
     assert len(model.seen) == 1
 
 
@@ -287,3 +288,37 @@ def test_extract_markers():
     assert sections == ["a:1.2", "b:3", "10:30", "a:2"]  # a time like [10:30] looks like a ref; it is dropped later
     assert images == ["a:img-1"]
     assert clean == "Fact, more at and a [link](x)."
+
+
+def test_listing_depth_two_shows_grandchildren_titles_only():
+    nav = Navigator(make_ships(), listing_depth=2)
+    listing = nav.list_children("root")
+    assert "- [1] Ship (2 subsections): no summary" in listing
+    assert "  - [1.1] Crew (leaf)" in listing
+    assert "  - [1.2] Engines (leaf)" in listing
+    assert nav.visited == {"root"}  # only the listed node counts as visited
+    # The agent can go straight to a grandchild it saw, without listing its parent first.
+    assert "The captain is Ada." in nav.read_node("1.1")
+
+
+def test_listing_depth_one_is_unchanged():
+    listing = Navigator(make_ships()).list_children("root")
+    assert listing == "Subsections of [root] Ships:\n- [1] Ship (2 subsections): no summary"
+
+
+def test_deep_listings_are_capped_and_previews_are_marked():
+    blocks = [Heading(1, "Big")] + [Heading(2, f"S{i}") for i in range(80)]
+    root, _ = build_tree(blocks, "Doc", "markdown")
+    root.children[0].summary, root.children[0].summary_source = "First sentence.", "preview"
+    index = DocumentIndex(doc_id="d", title="Doc", source_path="d.md", kind="markdown", root=root)
+
+    listing = Navigator(index, listing_depth=3).list_children("root")
+
+    assert "- [1] Big (80 subsections): (preview) First sentence." in listing
+    assert listing.count("\n  - [") == 60
+    assert "(+20 deeper subsections not shown; use list_children to see them)" in listing
+
+
+def test_library_navigator_passes_the_listing_depth_on():
+    nav = LibraryNavigator([make_ships(), make_cars()], listing_depth=2)
+    assert "  - [1.1] Engines (leaf)" in nav.open_document("cars")

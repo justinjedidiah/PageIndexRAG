@@ -77,7 +77,8 @@ A fixture giving tests a `Settings` that writes into the temp folder and uses a 
 
 | File | What it proves |
 |---|---|
-| `test_tree.py` | `build_tree` nests blocks correctly, including skipped heading levels, images becoming placeholders, and `split_large_nodes` creating generated parts that rejoin to the original text. Small nodes are left alone. |
+| `test_tree.py` | `build_tree` nests blocks correctly, including skipped heading levels, images becoming placeholders, and `split_large_nodes` creating generated parts that rejoin to the original text. Small nodes are left alone. Splitting is balanced, cuts a giant paragraph on sentences, cuts a big table by rows with its header repeated, keeps an image with its paragraph, and hard-cuts a word longer than the limit. |
+| `test_refine.py` | A good outline comes back unchanged in every mode; `off` changes nothing; merge joins only adjacent tiny leaves within the size limit; single-child chains collapse (the root keeps an outline); fold turns small subtrees into one leaf; a heading-less document becomes one level of parts; previews; presets. |
 | `test_extract.py` | The Markdown reader (code fences are not headings, images load) and the Word reader (headings, tables to Markdown with `\|` escaped, an embedded image) on a `.docx` the test builds with `python-docx`. |
 | `test_pipeline.py` | `index_document` end to end without AI (`use_llm=False`): ids, source ToC, generated parts, the image file saved and linked to its section, the saved index reloading identical, and re-indexing keeping a single library entry. |
 | `test_agent.py` | The `Navigator`/`LibraryNavigator` behavior and the whole agent loop with a scripted model (below). |

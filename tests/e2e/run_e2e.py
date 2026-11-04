@@ -65,6 +65,14 @@ def make_user_docx(path: Path) -> None:
     doc.save(path)
 
 
+def make_plain_docx(path: Path) -> None:
+    """A Word file with no heading styles at all: indexing must still give it a navigable outline."""
+    doc = Document()
+    for i in range(40):
+        doc.add_paragraph(f"Heron note {i}. Grey herons wade in shallow water and wait for fish. " + "They stand still. " * 12)
+    doc.save(path)
+
+
 def main() -> int:
     out = Path(sys.argv[1] if len(sys.argv) > 1 else tempfile.mkdtemp(prefix="e2e-shots-"))
     out.mkdir(parents=True, exist_ok=True)
@@ -157,16 +165,37 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
             page.get_by_role("button", name="Browse").nth(1).click()  # samples are sorted by title: the second is Meridian
             outline = page.locator("#source-panel")
             expect(outline.get_by_text("Outline", exact=True)).to_be_visible(timeout=10000)
-            outline.get_by_role("button").filter(has=page.get_by_text("Roster", exact=True)).click()
+            # Roster and Shift schedule are tiny, so indexing merged them into "Crew and Roles".
+            outline.get_by_role("button").filter(has=page.get_by_text("Crew and Roles", exact=True)).click()
             expect(page.get_by_text("Ada Okonkwo").first).to_be_visible(timeout=10000)
 
         step("browse a sample outline and read a section without a key", browse_sample, "02-browse.png")
         step("dialogs close", dismiss_dialog)
 
-        def locked_upload() -> None:
-            expect(page.get_by_role("button", name="Upload")).to_be_disabled()
+        def free_without_key() -> None:
+            plain = work / "Heron Notes.docx"
+            make_plain_docx(plain)
+            page.set_input_files("input[type=file]", str(plain))
+            page.get_by_role("button", name="Upload").click()
+            expect(page.locator("[data-preset=full]")).to_be_visible(timeout=30000)
+            # The default (Full) needs a key, so indexing is blocked until Free is chosen.
+            expect(page.get_by_role("button", name="Index it")).to_be_disabled()
+            page.locator("[data-preset=free]").click()
+            expect(page.locator("#pending-detail")).to_contain_text("No Claude calls", timeout=10000)
+            expect(page.get_by_role("button", name="Index it")).to_be_enabled()
+            page.get_by_role("button", name="Index it").click()
+            expect(page.get_by_role("button", name="Index it")).to_have_count(0, timeout=60000)
+            expect(page.get_by_text("Heron Notes").first).to_be_visible(timeout=15000)
 
-        step("upload is locked until a key is set", locked_upload)
+        step("the Free preset indexes a heading-less docx without a key", free_without_key, "02b-free.png")
+
+        def browse_free() -> None:
+            page.get_by_role("button", name="Browse").last.click()  # samples come first; Heron Notes is the only upload
+            outline = page.locator("#source-panel")
+            expect(outline.get_by_text("Heron Notes: Heron note 0.").first).to_be_visible(timeout=10000)
+
+        step("its outline shows parts titled by their first sentence", browse_free, "02c-free-outline.png")
+        step("the outline closes", dismiss_dialog)
 
         def enter_key() -> None:
             page.get_by_placeholder("sk-ant-...").fill(KEY)
@@ -197,7 +226,8 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
         step("navigation steps are shown", path_and_citation)
 
         def open_citation() -> None:
-            chips = page.locator("button[title]", has=page.locator("svg"))  # citation chips carry the document title
+            # Citation chips carry the document title (the trash buttons of uploads also have a title).
+            chips = page.locator("button[title]:not([title='Delete this document'])", has=page.locator("svg"))
             expect(chips.first).to_be_visible(timeout=10000)
             chips.first.click()
             expect(page.locator("#source-panel").get_by_text("Source", exact=True)).to_be_visible(timeout=10000)
@@ -229,9 +259,16 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
             make_user_docx(mine)
             page.set_input_files("input[type=file]", str(mine))
             page.get_by_role("button", name="Upload").click()
-            expect(page.get_by_text("Claude calls on your key")).to_be_visible(timeout=30000)
+            expect(page.locator("[data-preset=full]")).to_be_visible(timeout=30000)
+            page.locator("[data-preset=budget]").click()
+            detail = page.locator("#pending-detail")
+            expect(detail).to_contain_text("Claude calls on your key", timeout=10000)
+            budget = detail.inner_text()
+            page.locator("[data-preset=full]").click()
+            expect(detail).not_to_have_text(budget, timeout=10000)  # Full adds image descriptions and longer summaries
+            expect(detail).to_contain_text("1 image to describe")
 
-        step("a real docx shows a cost estimate before indexing", upload_real, "07-estimate.png")
+        step("a real docx shows a cost estimate per preset before indexing", upload_real, "07-estimate.png")
 
         def index_it() -> None:
             page.get_by_role("button", name="Index it").click()
@@ -256,11 +293,14 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
         step("the key is not written anywhere on disk", key_not_on_disk)
 
         def delete_mine() -> None:
-            page.locator("button[title='Delete this document']").first.click()
+            delete = page.locator("button[title='Delete this document']")
+            expect(delete).to_have_count(2, timeout=15000)  # Heron Notes and Pelican Care Guide
+            for remaining in (1, 0):
+                delete.first.click()
+                expect(delete).to_have_count(remaining, timeout=15000)
             expect(page.get_by_text("sample", exact=True)).to_have_count(3)
-            expect(page.locator("button[title='Delete this document']")).to_have_count(0, timeout=15000)
 
-        step("deleting your document removes it", delete_mine)
+        step("deleting your documents removes them", delete_mine)
 
         def end_session() -> None:
             page.get_by_role("button", name="End session and delete my data").click()

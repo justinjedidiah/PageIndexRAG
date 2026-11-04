@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from ..models import DocumentIndex, ImageRecord, Node
 
 AT_TOP = "Already at the top of the document."
+MAX_DEEPER_LINES = 60  # cap on title-only lines below the first level of a listing
 NO_DOCUMENT = "No document is open. Use open_document first (list_documents shows the ids)."
 
 
@@ -22,11 +23,16 @@ class Step(BaseModel):
 
 
 class Navigator:
-    """Navigation inside one document. `prefix` qualifies the ids shown for citation."""
+    """Navigation inside one document. `prefix` qualifies the ids shown for citation.
 
-    def __init__(self, index: DocumentIndex, prefix: str = ""):
+    `listing_depth` is how many tree levels one listing shows. Levels below the first show titles
+    only, so the agent can jump straight to a deep section without a call per level.
+    """
+
+    def __init__(self, index: DocumentIndex, prefix: str = "", listing_depth: int = 1):
         self.index = index
         self.prefix = prefix
+        self.listing_depth = max(1, listing_depth)
         self.nodes = index.node_map()
         self.parents = index.parent_map()
         self.images_by_node: dict[str, list[ImageRecord]] = defaultdict(list)
@@ -45,10 +51,19 @@ class Navigator:
             return f"[{node.id}] {node.title} has no subsections. Use read_node to read it."
 
         lines = [f"Subsections of [{node.id}] {node.title}:"]
+        deeper_shown = 0
+        hidden = 0
         for child in node.children:
-            shape = "leaf" if not child.children else f"{len(child.children)} subsections"
             visited = ", visited" if child.id in self.visited else ""
-            lines.append(f"- [{child.id}] {child.title} ({shape}{visited}): {child.summary or 'no summary'}")
+            lines.append(f"- [{child.id}] {child.title} ({_shape(child)}{visited}): {_summary(child)}")
+            for depth, descendant in _descendants(child, self.listing_depth - 1):
+                if deeper_shown >= MAX_DEEPER_LINES:
+                    hidden += 1
+                    continue
+                deeper_shown += 1
+                lines.append(f"{'  ' * depth}- [{descendant.id}] {descendant.title} ({_shape(descendant)})")
+        if hidden:
+            lines.append(f"(+{hidden} deeper subsections not shown; use list_children to see them)")
         return "\n".join(lines)
 
     def read_node(self, node_id: str) -> str:
@@ -72,14 +87,37 @@ class Navigator:
         return self.list_children(parent_id)
 
 
+def _shape(node: Node) -> str:
+    return "leaf" if not node.children else f"{len(node.children)} subsections"
+
+
+def _summary(node: Node) -> str:
+    if not node.summary:
+        return "no summary"
+    return f"(preview) {node.summary}" if node.summary_source == "preview" else node.summary
+
+
+def _descendants(node: Node, levels: int, depth: int = 1) -> list[tuple[int, Node]]:
+    """The node's descendants down to `levels` below it, in document order, with their indent depth."""
+    if levels <= 0:
+        return []
+    out = []
+    for child in node.children:
+        out.append((depth, child))
+        out.extend(_descendants(child, levels - 1, depth + 1))
+    return out
+
+
 class LibraryNavigator:
     """Navigation over several documents. Section tools act on the document that is open."""
 
-    def __init__(self, indexes: list[DocumentIndex]):
+    def __init__(self, indexes: list[DocumentIndex], listing_depth: int = 1):
         if not indexes:
             raise ValueError("A library needs at least one document.")
         self.indexes = {index.doc_id: index for index in indexes}
-        self.docs = {index.doc_id: Navigator(index, prefix=f"{index.doc_id}:") for index in indexes}
+        self.docs = {
+            index.doc_id: Navigator(index, prefix=f"{index.doc_id}:", listing_depth=listing_depth) for index in indexes
+        }
         self.current: str | None = indexes[0].doc_id if len(indexes) == 1 else None
         self.trace: list[Step] = []
 

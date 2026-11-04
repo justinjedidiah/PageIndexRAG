@@ -1,13 +1,13 @@
 # 02. Indexing: from an uploaded file to a searchable tree
 
-Files covered: everything in `src/pageindex_rag/indexing/` (`docx_extract.py`, `markdown_extract.py`, `tree.py`, `split.py`, `estimate.py`, `summarize.py`, `pipeline.py`, `blocks.py` was in file 01).
+Files covered: everything in `src/pageindex_rag/indexing/` (`docx_extract.py`, `markdown_extract.py`, `tree.py`, `refine.py`, `split.py`, `preview.py`, `options.py`, `estimate.py`, `summarize.py`, `pipeline.py`, `blocks.py` was in file 01).
 
 **Indexing** means turning a document into the tree of sections described in file 01, with a summary on every section. It happens once per document. Asking questions later only reads the result.
 
 It is deliberately done in **two stages**:
 
 ```
-Stage 1  build_index   (free, local)     file -> blocks -> tree -> split big sections -> save images
+Stage 1  build_index   (free, local)     file -> blocks -> tree -> refine (merge/fold/split) -> save images -> previews (Free)
          estimate_index (free, local)    count how many Claude calls stage 2 will need  -> shown to the visitor
 Stage 2  enrich_index  (costs money)     describe images, then summarize every section  -> uses the visitor's key
 Then     store.save_index                write index.json + library.json
@@ -174,15 +174,61 @@ Finally each node's text is its pieces joined by blank lines. It returns the tre
 
 ---
 
-## Stage 1, step C: split big sections (`split.py`)
+## Stage 1, step C: refine the tree (`refine.py`, `split.py`, `preview.py`)
 
-An agent asking to read a 40-page section would waste its whole budget. So any section with too much *own* text is cut into pieces.
+The tree from step B is the document's own outline. Before the agent can use it well, two problems can need fixing:
+
+- **Sections too big to read.** An agent asking to read a 40-page section would waste its whole budget.
+- **Too many tiny stops.** The agent sees one level of the tree per tool call, so every extra level, and every three-line section it has to open and leave again, costs a round trip out of a budget of about 15 steps.
+
+The rule is to **change the original outline only where a section breaks a limit**. A good outline comes back exactly as it was. Every change below is free (no LLM) and can be switched off with an option (see "Options and presets" further down).
+
+```python
+def refine_tree(root, options):
+    if options.small_sections == "fold":
+        for child in root.children:
+            _fold(child, options.max_leaf_tokens)
+    if options.small_sections != "off":
+        _collapse_chains(root, options.min_leaf_tokens)
+        _merge_tiny_leaves(root, options.min_leaf_tokens, options.max_leaf_tokens)
+        _collapse_chains(root, options.min_leaf_tokens)  # a merge can leave a section with one child
+    if options.split_large:
+        split_large_nodes(root, options.max_leaf_tokens)
+```
+
+Small sections are handled first and big ones split last, because a merge never makes a section bigger than one read, so nothing merged ever needs splitting again.
+
+### Counting size
 
 ```python
 def estimate_tokens(text): return len(text) // 4
 ```
 
-A **token** is the unit AI models read (roughly 3/4 of a word). Counting them exactly needs the model's own tokenizer; `len(text) // 4` is the rule of thumb "about 4 characters per token" for English. Good enough to decide "is this big?".
+A **token** is the unit AI models read (roughly 3/4 of a word). Counting them exactly needs the model's own tokenizer; `len(text) // 4` is the rule of thumb "about 4 characters per token" for English. Good enough to decide "is this big?". The two thresholds are `max_leaf_tokens` (default 2000, about 8,000 characters: the most one `read_node` should return) and `min_leaf_tokens` (default 150: below this a section is "tiny").
+
+### Small sections: merge (the default) and fold
+
+**Merge tiny siblings.** A run of two or more neighbouring sections that have no subsections and are each under `min_leaf_tokens` becomes one section, as long as the result still fits in one read. Under "Parts", the tiny "Bolt" and "Nut" become one section titled `Bolt · Nut`, whose text keeps each original title on its own line:
+
+```
+Bolt
+M6 steel.
+
+Nut
+M6 nylon.
+```
+
+It keeps the first section's id (`1.1`), is marked `origin="generated"`, and its `Location.covers` lists the merged titles, so a citation reads "Parts > Bolt, Nut".
+
+**Collapse single-child chains.** A section with exactly one subsection and almost no text of its own is just a hallway: the agent would spend a call walking through it. It absorbs the subsection and is titled `Safety › Rules`. When the absorbed child is a merge of the section's own subsections, the section keeps its own title and takes over their titles in `covers`. That is why the Meridian sample now lists "Overview (covers Mission, Station layout)" as one readable section.
+
+The root is special: it keeps its id and the document's title, and only absorbs a lone child that has subsections of its own. That removes the common "one big heading at the top" level, but a document always keeps an outline to browse.
+
+**Fold** (`small_sections="fold"`) does all of that, and also turns any part of the outline small enough to read in one go into a single section, with its sub-headings kept as lines in the text. It works top-down, so it folds the largest piece that fits. The root is never folded.
+
+`small_sections="off"` keeps the outline exactly as the file has it.
+
+### Big sections: split (`split.py`)
 
 ```python
 def split_large_nodes(node, max_tokens):
@@ -190,61 +236,72 @@ def split_large_nodes(node, max_tokens):
         split_large_nodes(child, max_tokens)       # handle the whole tree
     if estimate_tokens(node.text) <= max_tokens:
         return                                      # small enough, leave it
-    chunks = _chunk_paragraphs(node.text, max_tokens)
-    prefix = "" if node.id == "root" else f"{node.id}."
-    generated = [Node(id=f"{prefix}p{i}", title=f"{node.title} (part {i} of {len(chunks)})",
-                      level=node.level + 1, origin="generated", text=chunk,
-                      location=node.location.model_copy(deep=True))
-                 for i, chunk in enumerate(chunks, start=1)]
+    chunks = split_text(node.text, max_tokens)
+    ...
     node.text = ""
     node.children = [*generated, *node.children]
 ```
 
-If a node's text is over the limit (`max_leaf_tokens`, default 2000 tokens, about 8,000 characters):
+If a node's own text is over `max_leaf_tokens`:
 
-1. Cut the text into chunks (`_chunk_paragraphs`).
-2. Make a **new child node per chunk**, id like `2.1.p1`, `2.1.p2`, marked `origin="generated"` and given a placeholder title "Roster (part 1 of 2)". Each child copies the parent's `Location` (`model_copy(deep=True)`) so citations still point to the real heading.
+1. Cut the text into chunks (`split_text`).
+2. Make a **new child node per chunk**, id like `2.1.p1`, `2.1.p2`, marked `origin="generated"`. Each copies the parent's `Location` so citations still point to the real heading.
 3. Empty the parent's own text and put the new children **before** its existing children (the text came before the subsections in the document).
 
-The placeholder titles are replaced with real descriptive titles in stage 2 (the summarizer is told to rename only `generated` nodes).
+A document with no headings at all is just a root with a lot of text, so it becomes one level of parts directly under the root. It never gets deeper than that.
 
-```python
-def _chunk_paragraphs(text, max_tokens):
-    chunks, current, size = [], [], 0
-    for paragraph in text.split("\n\n"):
-        tokens = estimate_tokens(paragraph)
-        if current and size + tokens > max_tokens:
-            chunks.append("\n\n".join(current))
-            current, size = [], 0
-        current.append(paragraph)
-        size += tokens
-    if current:
-        chunks.append("\n\n".join(current))
-    return chunks
-```
+`split_text` cuts at the best boundary available:
 
-Greedy packing: add paragraphs to the current chunk until the next one would overflow, then start a new chunk. Cuts only ever happen **between paragraphs**, never mid-sentence. An image placeholder travels with its paragraph, so an image ends up in the correct part.
+- **Between paragraphs** first.
+- A paragraph that alone is too big is cut **between sentences** (`(?<=[.!?])\s+`: a split after `.`, `!` or `?` followed by whitespace).
+- A sentence that is still too big (a run-on list, a URL dump) gets a **hard cut** at the limit, backing off to the last space.
+- A Markdown **table** that is too big is cut **between rows**, and every piece repeats the header and separator rows, so each piece is still a readable table.
+- A paragraph that is only an image placeholder is attached to the paragraph after it, so an image is never a part on its own.
 
-Known limit: a single paragraph bigger than the limit stays whole (it is never cut inside).
+Then `_pack` groups the pieces into chunks. It first works out how many chunks the limit needs (`ceil(total / max)`) and aims each chunk at an equal share. A greedy "fill until full" packing would give 150 + 50 for 200 tokens with a limit of 150; this gives two chunks of about 100.
+
+Each part gets a **free title** from its first sentence, for example `Engines: The port engine is serviced every 400 hours.` (a table part gets `Engines: table (Part, Count)`). With LLM summaries on, stage 2 replaces it with a descriptive title. Merged and folded sections keep theirs, since they are made of real headings.
+
+### Free previews (`preview.py`)
+
+With the Free preset there is no stage 2, so nothing would fill in summaries. `fill_previews` gives every node a **preview** instead: its first sentences (3 by default, about 300 characters at most, image placeholders removed, a table shown as `[Table: Name, Role]`), followed by `Covers: A, B, C.` when it has subsections. `Node.summary_source` records `"preview"`, and the agent's listing marks such summaries `(preview)` so the model knows it is only the start of the section.
+
+### Options and presets (`IndexOptions` in `models.py`, presets in `options.py`)
+
+Everything above, plus what stage 2 does, is one record:
+
+| Option | Default | Meaning |
+|---|---|---|
+| `split_large` | on | split sections bigger than `max_leaf_tokens` (2000) |
+| `small_sections` | `merge` | `off`, `merge` or `fold`, with `min_leaf_tokens` (150) |
+| `summaries` | `llm` | `llm` (Claude) or `preview` (free) |
+| `summary_length` | `detailed` | `short` (1-2 sentences) or `detailed` (2-4) |
+| `describe_images` | on | Claude describes each image |
+
+The three presets only change the last three, since the tree settings cost nothing: **Free** (previews, no images: no LLM call at all, no key needed), **Budget** (short summaries, no images) and **Full** (detailed summaries and images, the default). The web page and the CLI start from a preset and let you change any single option on top. The index stores the options it was built with in `DocumentIndex.options`.
 
 ---
 
 ## Stage 1, step D: put it together (`pipeline.build_index`)
 
 ```python
-def build_index(path, store, settings) -> DocumentIndex:
+def build_index(path, store, settings, options=None) -> DocumentIndex:
+    options = options or preset_options(settings=settings)      # the Full preset
     kind, blocks = _extract(path)
     doc_id = make_doc_id(path)
     root, raw_images = build_tree(blocks, title=path.stem, kind=kind)
     source_toc = [TocEntry(title=b.title, level=b.level) for b in blocks if isinstance(b, Heading)] or None
-    split_large_nodes(root, settings.max_leaf_tokens)
+    refine_tree(root, options)
+    if options.summaries == "preview":
+        fill_previews(root, options.preview_sentences)
     images = [ImageRecord(id=image_id,
                           file=store.save_image(doc_id, image_id, image.data, image.ext),
                           mime=_MIME_TYPES.get(image.ext, f"image/{image.ext}"),
                           description=image.alt)
               for image_id, image in raw_images]
     index = DocumentIndex(doc_id=doc_id, title=path.stem, source_path=path.name, kind=kind,
-                          source_toc=source_toc, root=root, images=images)
+                          source_toc=source_toc, root=root, images=images,
+                          summary=root.summary, options=options)
     _assign_image_nodes(index)
     return index
 ```
@@ -253,9 +310,9 @@ Line by line:
 
 1. `_extract` picks the reader by file extension. For `.pdf` it raises `NotImplementedError("PDF support is stage 3")`. This is the *right* use of that error: a feature genuinely not written yet. (The web page checks for PDFs earlier and shows a friendly message instead of letting this fire.)
 2. `make_doc_id` (below) names the document.
-3. Tree, then `source_toc` (the heading list, kept as reference; `or None` turns an empty list into `None`), then splitting.
+3. Tree, then `source_toc` (the heading list, kept as reference; `or None` turns an empty list into `None`), then refining, then previews if the options ask for them.
 4. Each raw image is **written to disk right now** via `store.save_image`, and the `ImageRecord` remembers the relative path. `description=image.alt` seeds the description with the file's own alt text if it has any.
-5. `_assign_image_nodes` runs last, **after** splitting, so an image that moved into a generated part is linked to that part, not the parent:
+5. `_assign_image_nodes` runs last, **after** refining, so an image that moved into a generated part (or into a merged or folded section) is linked to the node that holds it now:
 
 ```python
 def _assign_image_nodes(index):
@@ -283,20 +340,20 @@ Note that images are on disk after `build_index` even though no `index.json` exi
 ## Between the stages: `estimate.py`
 
 ```python
-def estimate_index(index, store) -> Estimate:
+def estimate_index(index, store, options=None) -> Estimate:
+    options = options or index.options or IndexOptions()
     sections = list(index.root.walk())
-    input_tokens = 0
-    for node in sections:
-        text_tokens = estimate_tokens(node.text[:MAX_SECTION_CHARS])
-        input_tokens += PROMPT_OVERHEAD_TOKENS + text_tokens + SUMMARY_TOKENS * len(node.children)
-    images = sum(should_describe(record, (doc_dir / record.file).read_bytes())
-                 for record in index.images if (doc_dir / record.file).exists())
-    return Estimate(sections=len(sections), images=images, calls=len(sections) + images,
+    summaries = len(sections) if options.summaries == "llm" else 0
+    ...   # input tokens per summarized section, as below
+    images = 0
+    if options.describe_images:
+        images = sum(should_describe(...) for record in index.images if ...)
+    return Estimate(sections=len(sections), summaries=summaries, images=images, calls=summaries + images,
                     input_tokens=input_tokens + images * IMAGE_INPUT_TOKENS,
-                    output_tokens=len(sections) * OUTPUT_TOKENS + images * IMAGE_OUTPUT_TOKENS)
+                    output_tokens=summaries * OUTPUT_TOKENS[options.summary_length] + images * IMAGE_OUTPUT_TOKENS)
 ```
 
-It mirrors what stage 2 will do. **One Claude call per section** plus **one per describable image**. For each section the input is: a fixed instruction overhead (about 250 tokens) + the section's own text (cut at 12,000 characters like the real prompt) + about 70 tokens for each child's summary (a parent's prompt includes its children's summaries). Images are charged a flat guess of 1,500 input tokens. The number constants at the top (`250`, `70`, `110`, `1500`, `80`) are **estimates, not measurements**; that is why the page says "roughly". `Estimate` is a frozen dataclass (immutable result record).
+It mirrors what stage 2 will do **with the given options**. **One Claude call per section** when summaries are on, plus **one per describable image** when image descriptions are on. The Free preset gives zero calls. The web page calls it once per preset on the same tree, to show what each would cost. Short summaries are charged fewer output tokens (`OUTPUT_TOKENS = {"short": 60, "detailed": 110}`). For each section the input is: a fixed instruction overhead (about 250 tokens) + the section's own text (cut at 12,000 characters like the real prompt) + about 70 tokens for each child's summary (a parent's prompt includes its children's summaries). Images are charged a flat guess of 1,500 input tokens. The number constants at the top (`250`, `70`, `110`, `1500`, `80`) are **estimates, not measurements**; that is why the page says "roughly". `Estimate` is a frozen dataclass (immutable result record).
 
 Known gap: the cut-off `12000` appears twice (here as `MAX_SECTION_CHARS`, and as the default of `summarize_tree`'s `max_chars`). They are meant to match but nothing enforces it.
 
@@ -434,11 +491,13 @@ The exact text Claude receives. Image markers are swapped for their descriptions
 ### `pipeline.enrich_index`: running stage 2 with progress
 
 ```python
-def enrich_index(index, store, settings, api_key=None, on_progress=None):
+def enrich_index(index, store, settings, api_key=None, on_progress=None, options=None):
     from ..llm import chat_model
-    from .summarize import describe_images, summarize_tree
+    from .summarize import SUMMARY_MAX_TOKENS, describe_images, summarize_tree
 
-    total = estimate_index(index, store).calls
+    options = options or index.options or preset_options(settings=settings)
+    index.options = options
+    total = estimate_index(index, store, options).calls
     done = 0
     lock = threading.Lock()
 
@@ -449,10 +508,16 @@ def enrich_index(index, store, settings, api_key=None, on_progress=None):
             if on_progress:
                 on_progress(done, total, label)
 
-    describe_images(index.images, store.doc_dir(index.doc_id), chat_model(settings.vision_model, api_key), settings.index_workers, on_step)
-    summarize_tree(index.root, chat_model(settings.index_model, api_key), index.images, settings.index_workers, on_step)
-    index.summary = index.root.summary
+    if options.describe_images:
+        describe_images(index.images, store.doc_dir(index.doc_id), chat_model(settings.vision_model, api_key), ...)
+    if options.summaries == "llm":
+        summarize_tree(index.root,
+                       chat_model(settings.index_model, api_key, max_tokens=SUMMARY_MAX_TOKENS[options.summary_length]),
+                       index.images, settings.index_workers, on_step, length=options.summary_length)
+        index.summary = index.root.summary
 ```
+
+Each pass runs only if the options ask for it. `summary_length="short"` picks a schema whose summary field asks for one or two sentences, adds "in one or two short sentences" to the prompt, and caps the reply at 256 tokens (512 for detailed). The caps only stop a runaway reply; the prompt sets the length.
 
 - The imports are **inside the function** on purpose: the tests replace `pageindex_rag.llm.chat_model` with a fake and that only works if it is looked up at call time; and it avoids loading the Anthropic libraries when no AI call is being made.
 - `on_step` is called from the worker threads, possibly at the same moment, so the counter is protected by a **lock** (`with lock:` lets one thread at a time through). `nonlocal done` lets the inner function change the outer variable.
@@ -462,24 +527,27 @@ def enrich_index(index, store, settings, api_key=None, on_progress=None):
 ### `index_document`: the two stages in one call
 
 ```python
-def index_document(path, store, settings, use_llm=True, api_key=None, on_progress=None):
-    index = build_index(path, store, settings)
-    if use_llm:
-        enrich_index(index, store, settings, api_key, on_progress)
+def index_document(path, store, settings, use_llm=True, api_key=None, on_progress=None, options=None):
+    options = options or preset_options(settings=settings)
+    if not use_llm:
+        options = options.model_copy(update={"summaries": "preview", "describe_images": False})
+    index = build_index(path, store, settings, options)
+    if options.uses_llm:
+        enrich_index(index, store, settings, api_key, on_progress, options)
     store.save_index(index)
     return index
 ```
-Used by the command line, the sample builder and the tests. The web page calls the two stages separately so it can show the cost in between. `use_llm=False` skips stage 2 completely (no summaries): many tests use this.
+Used by the command line, the sample builder and the tests. The web page calls the two stages separately so it can show the cost in between. `use_llm=False` turns the options into free ones (previews instead of summaries, no image descriptions), so stage 2 is skipped: many tests use this.
 
 ---
 
 ## Things that are not built, or limited
 
-1. **A Word file with no Heading styles gets no real structure.** All its text lands under the root and is only cut by size into "(part n of m)" sections. The design intends to have Claude *generate* a table of contents for such files; **that is not implemented yet**. It was planned together with PDF.
+1. **A Word file with no Heading styles gets no real structure.** All its text lands under the root and is only cut by size into balanced parts (one level, titled by their first sentence). The design intends to have Claude *generate* a table of contents for such files, and optionally pick topic boundaries when splitting; **neither is implemented yet**. Both are planned together with PDF.
 2. **PDF reading does not exist** (`NotImplementedError`, see above).
 3. Word features that are ignored: headers and footers, footnotes, text boxes, nested tables. Merged table cells may repeat their text.
 4. The token estimate is a rough rule (characters / 4).
-5. One enormous paragraph is never split.
+5. Splitting is by size, not by topic: a cut can fall between two sentences that belong together.
 6. If any one Claude call fails (a bad key, a rate limit), the **whole indexing run stops** and the half-built document is deleted. There is no "resume". (The Anthropic library already retries transient errors a couple of times by itself.)
 7. Six parallel calls could exceed a small account's rate limit; the number is configurable (`PAGEINDEX_INDEX_WORKERS`).
 8. How *good* Haiku's summaries are on real documents has not been tested; that is the next thing to look at with your real key.

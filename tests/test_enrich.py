@@ -75,8 +75,10 @@ def test_enrich_summarizes_bottom_up_and_reports_progress(tmp_path, settings, mo
     assert next(r for r in index.images if r.id == "img-2").description == "tiny"  # skipped: keeps alt text
 
     # A parent's prompt includes its children's summaries, so children were done first.
-    assert "About Child." in llm.prompts["Top"]
-    assert "About Top." in llm.prompts[index.root.title]
+    # (The lone top heading "Top" was collapsed into the root, saving the agent a step.)
+    assert "Top" not in llm.prompts
+    assert "About Child." in llm.prompts[index.root.title]
+    assert all(node.summary_source == "llm" for node in index.root.walk())
 
     # Generated nodes got real titles; original ones kept theirs.
     long_parts = next(n for n in index.root.walk() if n.title == "Long").children
@@ -122,3 +124,36 @@ def test_friendly_error_never_echoes_the_raw_message():
     for exc, expected in cases:
         message = friendly_error(exc)
         assert expected in message and "sk-ant" not in message
+
+
+def test_estimate_follows_the_options(tmp_path, settings):
+    from pageindex_rag.indexing import preset_options
+
+    store, index = make_doc(tmp_path, settings)
+    free, budget, full = (estimate_index(index, store, preset_options(n, settings)) for n in ("free", "budget", "full"))
+
+    assert free.calls == 0 and free.input_tokens == 0 and free.output_tokens == 0
+    assert budget.images == 0 and budget.summaries == budget.sections
+    assert full.calls == full.summaries + 1
+    assert budget.output_tokens < full.output_tokens
+
+
+def test_budget_options_skip_images_and_ask_for_short_summaries(tmp_path, settings, monkeypatch):
+    from pageindex_rag.indexing import preset_options
+    from pageindex_rag.indexing.summarize import _ShortNodeSummary
+
+    store, index = make_doc(tmp_path, settings)
+    llm = FakeLLM()
+    schemas = []
+    original = llm.with_structured_output
+    llm.with_structured_output = lambda schema: schemas.append(schema) or original(schema)
+    caps = []
+    monkeypatch.setattr("pageindex_rag.llm.chat_model", lambda model, api_key=None, **kw: caps.append(kw) or llm)
+
+    enrich_index(index, store, settings, options=preset_options("budget", settings))
+
+    assert llm.image_calls == 0
+    assert schemas == [_ShortNodeSummary]
+    assert caps == [{"max_tokens": 256}]
+    assert "short sentences" in next(iter(llm.prompts.values()))
+    assert index.options.summary_length == "short"

@@ -48,7 +48,7 @@ class ChatMessage:
 
 Small dataclasses (`DocView`, `CitationView`, `ImageView`, `ChatMessage`, `OutlineRowView`) with **plain typed fields**. The page needs to loop over lists and read each item's fields; Reflex can do that when the items are dataclasses with declared types. They are *view* models: only what the screen needs, not the full core objects (a `Citation` from the agent becomes a `CitationView`).
 
-A `ChatMessage` is one bubble: a user message (just `text`), or an assistant message that fills in over time: `pending=True` while working, `steps` accumulating the navigation labels, then the final `text`, `citations`, `images`. `found=False` marks "no answer" / error messages (shown in grey and excluded from the history sent back to the agent).
+A `ChatMessage` is one bubble: a user message (just `text`), or an assistant message that fills in over time: `pending=True` while working, `steps` accumulating the navigation labels, then the final `text`, `citations`, `images`. `found=False` marks a reply with no citations (shown in grey, still rendered as Markdown). `error=True` marks text the app wrote rather than the model (a failed call, an empty library, a refusal notice, a used-up step budget); only those are left out of the history sent back to the agent. Real replies are kept, cited or not, so follow-ups like "tell me more about p3" have their context.
 
 ## `files.py`: serving images
 
@@ -225,7 +225,7 @@ finally:
 **`clear_key`**: forgets the key.
 
 **`handle_upload(files)`**: the longest handler. In order:
-1. Refuse if no key is set, if something is already in progress, or if no file was chosen.
+1. Refuse if something is already in progress, or if no file was chosen. No key is needed to upload: reading the file and building the tree are free, and the Free preset never uses a key.
 2. `name = safe_filename(upload.filename ...)` cleans the name. `data = await upload.read(settings.max_upload_bytes + 1)` reads the file **but never more than the limit plus one byte**, so an oversized upload cannot fill the server's memory; the `+1` lets the validator see "too big".
 3. `validate_upload(...)` (file 04). On refusal it shows the message and clears the selected file (`yield rx.clear_selected_files(UPLOAD_ID)`).
 4. A PDF is refused for now ("PDF indexing is not available yet").
@@ -233,23 +233,35 @@ finally:
 6. `self.building = True; yield` shows the spinner. Then in a `try`:
    - `sessions.ensure(token)` creates the session folder (this is the moment the 2-hour clock starts), saves the upload into `uploads/`.
    - `library.load(make_doc_id(path))`: if the same file (same content fingerprint) is already in the library, delete the copy and say so.
-   - `build_index` (stage 1, on a helper thread) and `estimate_index` (the cost).
+   - `build_index` (stage 1, on a helper thread) with the options currently chosen (`self._options()`).
    - `finally: self.building = False` always turns the spinner off. Any unexpected error is logged **without the document's content** and shown as a generic message.
-7. The unsummarized document is saved as `pending.json`; state remembers only its id and file name; `pending_detail` becomes the sentence "N sections and M images to describe. Indexing makes about C Claude calls on your key (roughly X input and Y output tokens)." The page then shows that sentence with **Index it** and **Cancel**.
+7. The unsummarized document is saved as `pending.json`; state remembers only its id and file name. `_show_estimates` fills `preset_choices` (one `PresetView` per preset: Free, Budget, Full, each with its own cost sentence from `estimate_index`) and `pending_detail` (the cost of the options chosen now, e.g. "12 sections, 1 image to describe. About 13 Claude calls on your key (roughly X input and Y output tokens)."). The page shows the three presets as clickable cards, an **Advanced options** toggle, that sentence, and **Index it** / **Cancel**.
+
+**Indexing options.** The options live in state as plain values (`opt_split`, `opt_max_leaf`, `opt_small`, `opt_min_leaf`, `opt_summaries`, `opt_summary_length`, `opt_images`: strings and booleans, never an `IndexOptions` object, for the proxy reason above); `_options()` turns them into an `IndexOptions`. `preset` is the matching preset name, or `"custom"` once the advanced panel makes them match none.
+- `set_preset(name)` copies the preset's LLM settings (summaries, length, images) into those fields and refreshes the estimates. The tree is not rebuilt: presets do not change it.
+- Each advanced control has its own handler (`set_opt_split`, `set_opt_small`, ...). A **tree** option (split, max size, small sections, tiny size) rebuilds the pending tree with `build_index` on a helper thread (free, no LLM; `rebuilding` shows a spinner on Index it), then refreshes the estimates. A summary or image option only refreshes the estimates.
+- `needs_key_to_index` is true when the options use Claude; then **Index it** is disabled until a key is set, with a hint to add one or pick Free.
 
 **`cancel_pending`**: forget and delete the pending document.
 
 **`confirm_index`** (a background handler, because it takes minutes):
 ```python
 async with self:
-    if not self._pending_id or self.indexing:
+    if not self._pending_id or self.indexing or self.rebuilding:
+        return
+    options = self._options()
+    if options.uses_llm and not self.key_set:
+        self.upload_error = "Add your Anthropic API key first, or choose the Free preset (it needs no key)."
         return
     key, token = self._api_key, self._token()
-    index = DocumentIndex.model_validate_json(pending_path(token).read_text(encoding="utf-8"))
-    total = estimate_index(index, sessions.store(token)).calls
+    source = sessions.uploads_dir(token) / self._pending_file
+    index = self._load_pending()
+    total = estimate_index(index, sessions.store(token), options).calls
     self.indexing = True
     ...
 ```
+
+The work itself runs in one helper-thread function, `run(index)`: if the pending tree was built with different options (for example the visitor switched between previews and summaries after uploading), it is rebuilt from the uploaded file first; then `enrich_index` runs only if the options use Claude; then the index is saved. With the Free preset there are no calls, so it finishes almost at once.
 `async with self:` is how a background handler gets (briefly) safe access to state: read what it needs, set `indexing`, leave. It loads the pending document back from `pending.json`. Then, **outside** the lock (so the page stays responsive and can show progress):
 
 ```python
@@ -293,7 +305,7 @@ async with self:
     self.messages = [*self.messages, ChatMessage(role="user", text=question), ChatMessage(role="assistant", pending=True)]
 yield scroll_chat()
 ```
-Inside the lock: refuse if already answering or no key; build the **history** to give the agent (earlier finished messages with text, excluding failed answers; only the last 12 messages = 6 question/answer pairs); mark `thinking`; append the visitor's bubble and an empty **pending** assistant bubble (which the page shows as "Working..."); scroll.
+Inside the lock: refuse if already answering or no key; build the **history** to give the agent (earlier finished messages with text, excluding app-written error replies; only the last 12 messages = 6 question/answer pairs); mark `thinking`; append the visitor's bubble and an empty **pending** assistant bubble (which the page shows as "Working..."); scroll.
 
 ```python
 library = Library.for_session(settings, sessions, token)
@@ -367,7 +379,7 @@ Renders text as Markdown (answers, section text) with table borders and images t
 
 - `key_card`: a form (`rx.form`) whose submit sends the `save_key` event; a password-type input; shows a green "Key set" badge and a Remove button once a key is set; shows `State.key_error` in red; and the privacy sentence ("stays in this session's server memory only...").
 - `library_card`: lists `State.docs` through `doc_row` (title, a "sample" badge, a Browse button, and a trash button only for non-samples: `rx.cond(~doc.sample, ...)`), plus the `session_note`.
-- `upload_card`: a three-way switch on state: `indexing` -> `indexing_view` (progress bar and "N of M: label"); else `has_pending` -> `pending_view` (the cost sentence with **Index it** / **Cancel**); else `upload_form`. The upload form is `rx.upload` (a drop zone limited to the accepted types, one file, the size limit, disabled until a key is set) and an **Upload** button that sends the `handle_upload` event with the selected files.
+- `upload_card`: a three-way switch on state: `indexing` -> `indexing_view` (progress bar and "N of M: label"); else `has_pending` -> `pending_view` (the cost sentence with **Index it** / **Cancel**); else `upload_form`. The upload form is `rx.upload` (a drop zone limited to the accepted types, one file, the size limit, open without a key) and an **Upload** button that sends the `handle_upload` event with the selected files.
 
 ### Middle column (`chat_panel`)
 

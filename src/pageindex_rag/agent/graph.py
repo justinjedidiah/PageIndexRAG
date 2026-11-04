@@ -31,7 +31,9 @@ How to work:
 - {start}
 - Before each tool call, say in one short sentence what you are about to do and why.
 - Use list_children to look inside a section, going into the subsection whose summary best matches the question. \
-Tools take the ids shown in square brackets in listings.
+Tools take the ids shown in square brackets in listings. Indented lines in a listing are deeper subsections (titles \
+only): you can read_node or list_children any id you have seen, without stepping through each level.
+- A summary marked (preview) is just the first sentences of the section, not a summary of all of it.
 - Use read_node to read a section's text. Sections with subsections usually have little text of their own.
 - After reading, decide whether the text answers the question. If it does not, use go_up and try another branch, \
 or open another document. Avoid sections marked visited unless you have a reason to return.
@@ -71,8 +73,11 @@ class ImageRef(BaseModel):
 
 
 class AnswerResult(BaseModel):
-    found: bool
+    found: bool  # at least one valid citation
     text: str
+    # The text was written by the app, not the model (refusal notice, step budget, empty reply).
+    # Such replies are left out of the history sent with later questions; real replies are kept, cited or not.
+    error: bool = False
     citations: list[Citation] = Field(default_factory=list)
     images: list[ImageRef] = Field(default_factory=list)
 
@@ -176,11 +181,13 @@ def build_graph(navigator: LibraryNavigator, llm: BaseChatModel, max_steps: int)
     def finish(state: AgentState) -> dict:
         last = state["messages"][-1]
         if _refused(last):
-            return {"result": AnswerResult(found=False, text=REFUSED_TEXT)}
+            return {"result": AnswerResult(found=False, text=REFUSED_TEXT, error=True)}
         return {"result": _answer_result(navigator, _message_text(last))}
 
     def give_up(state: AgentState) -> dict:
-        return {"result": AnswerResult(found=False, text="Stopped: step budget used up before finding an answer.")}
+        return {
+            "result": AnswerResult(found=False, text="Stopped: step budget used up before finding an answer.", error=True)
+        }
 
     def after_model(state: AgentState) -> str:
         return "tools" if state["messages"][-1].tool_calls else "finish"
@@ -237,7 +244,7 @@ def stream_agent(
                 emitted = len(navigator.trace)
             if isinstance(changes, dict) and changes.get("result") is not None:
                 result = changes["result"]
-    yield result or AnswerResult(found=False, text="No answer was produced.")
+    yield result or AnswerResult(found=False, text="No answer was produced.", error=True)
 
 
 def run_agent(
@@ -262,7 +269,8 @@ def stream_ask(
 
     settings = settings or get_settings()
     llm = chat_model(settings.agent_model, api_key)
-    return stream_agent(LibraryNavigator(indexes), llm, question, settings.agent_max_steps, history)
+    navigator = LibraryNavigator(indexes, listing_depth=settings.agent_listing_depth)
+    return stream_agent(navigator, llm, question, settings.agent_max_steps, history)
 
 
 def ask(
@@ -308,6 +316,7 @@ def _answer_result(navigator: LibraryNavigator, reply: str) -> AnswerResult:
     return AnswerResult(
         found=bool(citations),
         text=text or "The model sent an empty reply. Please ask again.",
+        error=not text,
         citations=citations,
         images=images,
     )

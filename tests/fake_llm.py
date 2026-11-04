@@ -78,9 +78,13 @@ def next_message(messages: list) -> AIMessage:
         return AIMessage(f"{text}\n\n(Answered by the offline test model.) {markers}")
 
     children = re.findall(r"^- \[([^\]]+)\] (.*?) \((leaf|\d+ subsections)[^)]*\): (.*)$", last, re.MULTILINE)
+    # Deeper levels of a multi-level listing: indented, titles only. The agent may jump straight to them.
+    children += [(i, t, shape, "") for i, t, shape in re.findall(r"^ +- \[([^\]]+)\] (.*?) \((leaf|\d+ subsections)\)$", last, re.MULTILINE)]
     if not children:
         return AIMessage("I could not find anything relevant in that section.")
-    chosen_id = best(question, [(c[0], f"{c[1]} {c[3]}") for c in children])
+    asked = words(question)
+    # The best match wins; on a tie a leaf wins (it can be read now), then the earlier line.
+    chosen_id = max(children, key=lambda c: (len(asked & words(f"{c[1]} {c[3]}")), c[2] == "leaf"))[0]
     chosen = next(c for c in children if c[0] == chosen_id)
     return tool_call("read_node" if chosen[2] == "leaf" else "list_children", node_id=chosen_id)
 

@@ -34,7 +34,10 @@ PageIndexRAG/
 │   │   ├─ docx_extract.py      Word -> blocks                                            (02)
 │   │   ├─ markdown_extract.py  Markdown -> blocks (developer use)                        (02)
 │   │   ├─ tree.py              blocks -> tree of sections                                (02)
-│   │   ├─ split.py             cut very large sections into parts                        (02)
+│   │   ├─ refine.py            merge tiny sections, fold small ones, then split big ones (02)
+│   │   ├─ split.py             cut very large sections into balanced parts               (02)
+│   │   ├─ preview.py           free previews (first sentences) when summaries are off    (02)
+│   │   ├─ options.py           presets: Free / Budget / Full                             (02)
 │   │   ├─ estimate.py          how many Claude calls will indexing need?                 (02)
 │   │   ├─ summarize.py         the Claude calls: describe images, summarize sections     (02)
 │   │   └─ pipeline.py          runs the two indexing stages                              (02)
@@ -81,7 +84,7 @@ Visitor drops a .docx on the page and presses Upload
      -> pipeline.build_index                               (02)  STAGE 1, free
           -> extract_docx            file -> blocks
           -> build_tree              blocks -> nested sections
-          -> split_large_nodes       cut oversized sections
+          -> refine_tree             merge tiny sections, split oversized ones
           -> store.save_image        images written to disk
      -> estimate_index                                     (02)  "about 17 Claude calls"
      -> writes pending.json, shows the cost and the Index it / Cancel buttons

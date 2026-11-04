@@ -90,6 +90,18 @@ Subsections of [3] Life Support:
 
 Each line has the **id in square brackets** (what the model will pass back), the title, whether it is a `leaf` or has N subsections (a hint: leaves are for reading, branches for opening), a `visited` flag if it was seen, and **the summary written at index time**: the thing the model uses to choose. Errors (unknown id) are also returned as text instead of raising: the model sees "Unknown node id" and can correct itself. An exception here would crash the whole question.
 
+**Several levels at once (`listing_depth`).** Each tree level the agent steps through costs one tool call, out of a budget of about 15. So a `Navigator` can show more than one level per listing: with `listing_depth=2` (the default, from `PAGEINDEX_LISTING_DEPTH`) every child line is followed by its own children, indented, with **titles and ids only** (no summaries, to keep the listing short):
+
+```
+Subsections of [root] Meridian Station Operations Handbook:
+- [1] Overview (2 subsections): The station's mission and layout ...
+  - [1.1] Mission (leaf)
+  - [1.2] Station layout (leaf)
+- [2] Crew and Roles (leaf): Who is on board and their shifts ...
+```
+
+The model may `read_node("1.2")` straight away, without first listing `[1]`. Deeper lines are capped at 60 (`MAX_DEEPER_LINES`), with a "+N more" note; only the node actually listed is marked visited. A summary that is only a free preview (Free preset) is shown as `(preview) ...`, and the system prompt explains both conventions. `LibraryNavigator(indexes, listing_depth)` passes the depth to every document; the web page has an "Outline levels per look" selector next to the chat box, and the CLI has `ask --listing-depth`. With depth 1 the listing is exactly the one-level form above.
+
 **`read_node`** (the tool "give me this section's actual text"):
 
 ```python

@@ -6,6 +6,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from pathlib import Path
+from typing import Literal
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage
@@ -23,6 +24,9 @@ MAX_VISION_SIDE = 1568  # larger images are shrunk first (the API's recommended 
 MAX_VISION_BYTES = 5 * 1024 * 1024
 
 OnStep = Callable[[str], None]
+SummaryLength = Literal["short", "detailed"]
+# Output caps per call. The prompt sets the length; these only stop a runaway reply.
+SUMMARY_MAX_TOKENS: dict[str, int] = {"short": 256, "detailed": 512}
 
 
 class _NodeSummary(BaseModel):
@@ -31,6 +35,14 @@ class _NodeSummary(BaseModel):
         description="2-4 sentences: what the section covers and which questions it can answer. "
         "Mention any tables or images."
     )
+
+
+class _ShortNodeSummary(BaseModel):
+    title: str = Field(description="Short descriptive title for the section.")
+    summary: str = Field(description="One or two short sentences: which questions the section answers.")
+
+
+_SUMMARY_SCHEMAS: dict[str, type[BaseModel]] = {"short": _ShortNodeSummary, "detailed": _NodeSummary}
 
 
 class _ImageDescription(BaseModel):
@@ -100,12 +112,13 @@ def summarize_tree(
     workers: int = 6,
     on_step: OnStep | None = None,
     max_chars: int = 12000,
+    length: SummaryLength = "detailed",
 ) -> None:
     """Summarize every node, deepest level first, so parents are summarized from their children.
 
     Nodes on one level do not depend on each other, so each level runs in parallel.
     """
-    model = llm.with_structured_output(_NodeSummary)
+    model = llm.with_structured_output(_SUMMARY_SCHEMAS[length])
     descriptions = {record.id: record.description for record in images}
 
     levels: dict[int, list[Node]] = defaultdict(list)
@@ -116,9 +129,10 @@ def summarize_tree(
         pending.extend((child, depth + 1) for child in node.children)
 
     def summarize(node: Node) -> None:
-        result = model.invoke(_prompt(node, descriptions, max_chars))
+        result = model.invoke(_prompt(node, descriptions, max_chars, length))
         node.summary = result.summary
-        if node.origin == "generated":
+        node.summary_source = "llm"
+        if _retitle(node):
             node.title = result.title
         if on_step:
             on_step(f'Summarized "{node.title}"')
@@ -128,7 +142,12 @@ def summarize_tree(
             list(pool.map(summarize, levels[depth]))
 
 
-def _prompt(node: Node, descriptions: dict[str, str], max_chars: int) -> str:
+def _retitle(node: Node) -> bool:
+    """Split parts get an LLM title. Merged and folded sections keep theirs: it is made of original headings."""
+    return node.origin == "generated" and not node.location.covers
+
+
+def _prompt(node: Node, descriptions: dict[str, str], max_chars: int, length: SummaryLength = "detailed") -> str:
     text = IMAGE_REF.sub(lambda m: f"[image: {descriptions.get(m.group(1)) or 'no description'}]", node.text)
     if len(text) > max_chars:
         text = text[:max_chars] + "\n[...truncated]"
@@ -139,6 +158,10 @@ def _prompt(node: Node, descriptions: dict[str, str], max_chars: int) -> str:
         f"Section title: {node.title}\n\n"
         f"Section text:\n{text or '(no text of its own)'}\n\n"
         f"Subsections:\n{children}\n\n"
-        "Write the summary. For the title, keep the existing one unless it is a generic placeholder "
-        "like 'part 2 of 3', in which case write a descriptive one."
+        + ("Write the summary in one or two short sentences. " if length == "short" else "Write the summary. ")
+        + (
+            "This section is one part of a longer section, cut by size: write a short descriptive title for it."
+            if _retitle(node)
+            else "For the title, keep the existing one."
+        )
     )

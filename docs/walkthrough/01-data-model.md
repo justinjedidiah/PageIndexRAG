@@ -28,6 +28,8 @@ FileKind = Literal["pdf", "docx", "markdown"]
 
 The three source types. `markdown` is only used by the developer command line and the tests (the web page refuses it). `pdf` is in the list already because the data model is ready for PDF even though the PDF reader is not written yet.
 
+Newer fields, all optional so older saved indexes still load: `Node.summary_source` (`"llm"`, `"preview"` for a free first-sentences preview, or empty), `Location.covers`, and `DocumentIndex.options` (the `IndexOptions` the document was indexed with; see file 02).
+
 ### `Location`: where a section came from
 
 ```python
@@ -40,7 +42,7 @@ class Location(BaseModel):
     printed_page_end: str | None = None
 ```
 
-A `Location` is **only used for citations**: the text shown to the visitor after an answer ("Crew and Roles > Roster"). It is deliberately kept separate from the section's text, so the text can stay plain and the "where is this?" information can differ per file type.
+A `Location` is **only used for citations**: the text shown to the visitor after an answer ("Crew and Roles > Roster"). It is deliberately kept separate from the section's text, so the text can stay plain and the "where is this?" information can differ per file type. `covers` lists the titles of small sections that indexing merged or folded into this one (see `refine.py` in file 02); `label()` then reads "Parts > Bolt, Nut".
 
 - For Word files there are no stable pages (Word re-flows text depending on the program), so the location is the **heading path**: the list of headings from the top down to this section.
 - For PDFs, the page fields are reserved. Two separate numbers are kept on purpose: the PDF's own page index (0, 1, 2...) and the page number *printed* on the page (which might be "iv" or "212" even if it is the 230th page). Visitors should be shown the printed one.
@@ -74,7 +76,7 @@ The most important class in the project. A document is a **tree of `Node`s**.
 
 | Field | Meaning |
 |---|---|
-| `id` | Position in the tree: `"1"`, `"1.2"`, `"1.2.1"`. The root is the special id `"root"`. Generated sub-parts use `"1.p1"`, `"1.p2"` (see `split.py`). The agent uses these ids to ask for sections. |
+| `id` | Position in the tree: `"1"`, `"1.2"`, `"1.2.1"`. The root is the special id `"root"`. Generated sub-parts use `"1.p1"`, `"1.p2"` (see `split.py`). A section made by merging tiny siblings keeps the first one's id (see `refine.py`). The agent uses these ids to ask for sections. |
 | `title` | The heading text, e.g. `Roster`. |
 | `level` | Heading depth: 1 for Heading 1, 2 for Heading 2. The root is 0. Used only while building the tree. |
 | `origin` | `"original"` if the heading existed in the file; `"generated"` if our own size-splitting created it. |

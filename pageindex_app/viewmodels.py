@@ -39,8 +39,17 @@ class ChatMessage:
     steps: list[StepView] = dataclasses.field(default_factory=list)
     citations: list[CitationView] = dataclasses.field(default_factory=list)
     images: list[ImageView] = dataclasses.field(default_factory=list)
-    found: bool = True
+    found: bool = True  # has citations; uncited replies are shown in grey
+    error: bool = False  # written by the app, not the model: left out of the agent's history
     pending: bool = False
+
+
+@dataclasses.dataclass
+class PresetView:
+    name: str  # "free", "budget" or "full"
+    label: str
+    description: str
+    cost: str  # the estimate for the pending document
 
 
 @dataclasses.dataclass

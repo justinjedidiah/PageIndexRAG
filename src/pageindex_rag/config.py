@@ -19,6 +19,8 @@ class Settings:
     agent_model: str
     max_leaf_tokens: int
     agent_max_steps: int
+    min_leaf_tokens: int = 150
+    agent_listing_depth: int = 2  # tree levels one listing shows (1-3); deeper levels show titles only
     # Web app
     session_ttl_seconds: int = 2 * 60 * 60
     max_upload_bytes: int = 15 * 1024 * 1024
@@ -39,6 +41,8 @@ def get_settings() -> Settings:
         agent_model=os.getenv("PAGEINDEX_AGENT_MODEL", "claude-sonnet-5-5"),
         max_leaf_tokens=int(os.getenv("PAGEINDEX_MAX_LEAF_TOKENS", "2000")),
         agent_max_steps=int(os.getenv("PAGEINDEX_AGENT_MAX_STEPS", "15")),
+        min_leaf_tokens=int(os.getenv("PAGEINDEX_MIN_LEAF_TOKENS", "150")),
+        agent_listing_depth=min(3, max(1, int(os.getenv("PAGEINDEX_LISTING_DEPTH", "2")))),
         session_ttl_seconds=int(os.getenv("PAGEINDEX_SESSION_TTL_SECONDS", str(2 * 60 * 60))),
         max_upload_bytes=int(os.getenv("PAGEINDEX_MAX_UPLOAD_MB", "15")) * 1024 * 1024,
         max_session_docs=int(os.getenv("PAGEINDEX_MAX_SESSION_DOCS", "5")),

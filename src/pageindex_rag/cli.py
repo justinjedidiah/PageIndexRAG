@@ -1,9 +1,11 @@
 """Command line: index files, list them, print a tree, ask a question."""
 
 import argparse
+from dataclasses import replace
 
-from .config import get_settings
-from .models import Node
+from .config import Settings, get_settings
+from .indexing.options import DEFAULT_PRESET, PRESET_NAMES, preset_options
+from .models import IndexOptions, Node
 from .storage import Store
 
 
@@ -13,7 +15,15 @@ def main(argv: list[str] | None = None) -> None:
 
     index_cmd = commands.add_parser("index", help="index a .docx or .md file")
     index_cmd.add_argument("path")
-    index_cmd.add_argument("--no-llm", action="store_true", help="skip summaries and image descriptions")
+    index_cmd.add_argument("--preset", choices=PRESET_NAMES, default=DEFAULT_PRESET, help="what to spend on the LLM")
+    index_cmd.add_argument("--no-llm", action="store_true", help="same as --preset free: no LLM calls at all")
+    index_cmd.add_argument("--no-split", action="store_true", help="never split sections that are too big")
+    index_cmd.add_argument("--max-leaf", type=int, help="largest section, in tokens, before it is split")
+    index_cmd.add_argument("--small-sections", choices=["off", "merge", "fold"], help="how to handle tiny sections")
+    index_cmd.add_argument("--min-leaf", type=int, help="sections under this many tokens count as tiny")
+    index_cmd.add_argument("--summaries", choices=["llm", "preview"], help="LLM summaries or free previews")
+    index_cmd.add_argument("--summary-length", choices=["short", "detailed"])
+    index_cmd.add_argument("--no-images", action="store_true", help="skip image descriptions")
 
     commands.add_parser("list", help="list indexed documents")
 
@@ -23,6 +33,7 @@ def main(argv: list[str] | None = None) -> None:
     ask_cmd = commands.add_parser("ask", help="ask a question about the library (or one document)")
     ask_cmd.add_argument("question")
     ask_cmd.add_argument("--doc", help="limit to one document id")
+    ask_cmd.add_argument("--listing-depth", type=int, choices=[1, 2, 3], help="tree levels one listing shows")
 
     args = parser.parse_args(argv)
     settings = get_settings()
@@ -31,8 +42,16 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "index":
         from .indexing import index_document
 
-        index = index_document(args.path, store, settings, use_llm=not args.no_llm)
+        index = index_document(args.path, store, settings, options=_index_options(args, settings))
+        options = index.options
         print(f"Indexed {index.doc_id}: {sum(1 for _ in index.root.walk())} nodes, {len(index.images)} images")
+        print(
+            f"  split={'on' if options.split_large else 'off'} (max {options.max_leaf_tokens} tokens), "
+            f"small sections={options.small_sections} (min {options.min_leaf_tokens}), "
+            f"summaries={options.summaries}"
+            + (f" ({options.summary_length})" if options.summaries == "llm" else "")
+            + f", images={'described' if options.describe_images else 'not described'}"
+        )
     elif args.command == "list":
         for entry in store.list_documents():
             print(f"{entry.doc_id}  ({entry.kind})  {entry.title}")
@@ -44,6 +63,8 @@ def main(argv: list[str] | None = None) -> None:
         doc_ids = [args.doc] if args.doc else [entry.doc_id for entry in store.list_documents()]
         if not doc_ids:
             parser.error("no documents indexed yet")
+        if args.listing_depth:
+            settings = replace(settings, agent_listing_depth=args.listing_depth)
         for event in stream_ask([store.load_index(doc_id) for doc_id in doc_ids], args.question, settings):
             if isinstance(event, Step):
                 print(f"  > {event.label}")
@@ -56,9 +77,30 @@ def main(argv: list[str] | None = None) -> None:
                 print(f"  image: {image.doc_id}:{image.image_id} ({image.description})")
 
 
+def _index_options(args: argparse.Namespace, settings: Settings) -> IndexOptions:
+    """The chosen preset, with any single option given on the command line applied on top."""
+    overrides = {
+        "split_large": False if args.no_split else None,
+        "max_leaf_tokens": args.max_leaf,
+        "small_sections": args.small_sections,
+        "min_leaf_tokens": args.min_leaf,
+        "summaries": args.summaries,
+        "summary_length": args.summary_length,
+        "describe_images": False if args.no_images else None,
+    }
+    preset = "free" if args.no_llm else args.preset
+    options = preset_options(preset, settings, **{k: v for k, v in overrides.items() if v is not None})
+    if args.no_llm:
+        options = options.model_copy(update={"summaries": "preview", "describe_images": False})
+    return options
+
+
 def _print_tree(node: Node, depth: int = 0) -> None:
-    marker = " *" if node.origin == "generated" else ""
-    print(f"{'  ' * depth}[{node.id}] {node.title}{marker}  ({len(node.text)} chars)")
+    marker = " *" if node.origin == "generated" else ""  # * = made by indexing, not an original heading
+    covers = f"  covers: {', '.join(node.location.covers)}" if node.location.covers else ""
+    print(f"{'  ' * depth}[{node.id}] {node.title}{marker}  ({len(node.text)} chars){covers}")
+    if node.summary_source == "preview" and node.summary:
+        print(f"{'  ' * depth}    preview: {node.summary[:100]}")
     for child in node.children:
         _print_tree(child, depth + 1)
 
