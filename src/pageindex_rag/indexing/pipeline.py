@@ -84,13 +84,15 @@ def enrich_index(
     api_key: str | None = None,
     on_progress: OnProgress | None = None,
     options: IndexOptions | None = None,
+    cancel: threading.Event | None = None,
 ) -> None:
     """Describe images and summarize every section, in place, as far as the options ask. Raises if an LLM call fails.
 
-    Options default to the ones the index was built with.
+    Options default to the ones the index was built with. Setting `cancel` (from any thread) stops the
+    work: calls already sent finish, no new one starts, and IndexingCancelled is raised.
     """
     from ..llm import chat_model
-    from .summarize import SUMMARY_MAX_TOKENS, describe_images, summarize_tree
+    from .summarize import SUMMARY_MAX_TOKENS, check_cancelled, describe_images, summarize_tree
 
     options = options or index.options or preset_options(settings=settings)
     index.options = options
@@ -112,7 +114,9 @@ def enrich_index(
             chat_model(settings.vision_model, api_key),
             settings.index_workers,
             on_step,
+            cancel,
         )
+    check_cancelled(cancel)
     if options.summaries == "llm":
         summarize_tree(
             index.root,
@@ -121,6 +125,7 @@ def enrich_index(
             settings.index_workers,
             on_step,
             length=options.summary_length,
+            cancel=cancel,
         )
         index.summary = index.root.summary
 

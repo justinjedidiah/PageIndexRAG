@@ -65,6 +65,15 @@ def make_user_docx(path: Path) -> None:
     doc.save(path)
 
 
+def make_long_docx(path: Path, sections: int = 30) -> None:
+    """Many real sections, so indexing it takes a while with the slowed-down fake model."""
+    doc = Document()
+    for i in range(sections):
+        doc.add_heading(f"Chapter {i}", level=1)
+        doc.add_paragraph(f"Chapter {i} explains one topic in detail. " + "It has plenty to say. " * 40)
+    doc.save(path)
+
+
 def make_plain_docx(path: Path) -> None:
     """A Word file with no heading styles at all: indexing must still give it a navigable outline."""
     doc = Document()
@@ -93,8 +102,10 @@ def main() -> int:
         env=env, cwd=ROOT, check=True, capture_output=True,
     )
     log_path = out / "server.log"
+    # Each indexing call takes a moment in the app, so "End session" can be pressed while indexing runs.
+    server_env = {**env, "PAGEINDEX_FAKE_INDEX_DELAY": "0.5"}
     with log_path.open("wb") as log:
-        server = subprocess.Popen([sys.executable, "-m", "reflex", "run"], cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
+        server = subprocess.Popen([sys.executable, "-m", "reflex", "run"], cwd=ROOT, env=server_env, stdout=log, stderr=subprocess.STDOUT)
     try:
         if not (wait_for(f"{BACKEND}/ping", 240) and wait_for(FRONTEND, 240)):
             print("Server did not start. See", log_path)
@@ -272,7 +283,8 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
 
         def index_it() -> None:
             page.get_by_role("button", name="Index it").click()
-            expect(page.get_by_text("Pelican Care Guide").first).to_be_visible(timeout=60000)
+            # The button disappears as soon as indexing starts; the toast means it has finished and saved.
+            expect(page.get_by_text("Indexed Pelican Care Guide").first).to_be_visible(timeout=60000)
             expect(page.get_by_role("button", name="Index it")).to_have_count(0, timeout=60000)
 
         step("indexing completes and the document joins the library", index_it, "08-indexed.png")
@@ -302,14 +314,27 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
 
         step("deleting your documents removes them", delete_mine)
 
-        def end_session() -> None:
+        def end_session_while_indexing() -> None:
+            long_doc = work / "Long Report.docx"
+            make_long_docx(long_doc)
+            page.set_input_files("input[type=file]", str(long_doc))
+            page.get_by_role("button", name="Upload").click()
+            page.locator("[data-preset=full]").click(timeout=30000)
+            page.get_by_role("button", name="Index it").click()
+            expect(page.get_by_text("Indexing with your key...")).to_be_visible(timeout=15000)
+            page.wait_for_timeout(1500)  # a few summaries done, most still to go
             page.get_by_role("button", name="End session and delete my data").click()
-            expect(page.get_by_text("Session ended").first).to_be_visible(timeout=15000)
+            expect(page.get_by_text("Indexing was stopped").first).to_be_visible(timeout=15000)
             expect(page.get_by_placeholder("sk-ant-...")).to_be_visible(timeout=10000)
+            expect(page.get_by_text("Indexing with your key...")).to_have_count(0)
+            # Give the job time to wind down; it must not save or recreate the deleted folder.
+            page.wait_for_timeout(6000)
             leftovers = [d for d in (data / "sessions").iterdir()] if (data / "sessions").exists() else []
             assert not leftovers, f"session folder left behind: {leftovers}"
+            expect(page.get_by_text("Long Report")).to_have_count(0)
+            expect(page.get_by_text("Indexing failed")).to_have_count(0)
 
-        step("ending the session deletes the folder and the key", end_session, "10-ended.png")
+        step("ending the session mid-indexing stops it and deletes everything", end_session_while_indexing, "10-ended.png")
 
         def mobile() -> None:
             page.set_viewport_size({"width": 375, "height": 800})

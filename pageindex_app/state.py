@@ -7,6 +7,7 @@ import asyncio
 import dataclasses
 import itertools
 import logging
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -14,7 +15,15 @@ from typing import Any
 import reflex as rx
 from pageindex_rag.agent import AnswerResult, ChatTurn, Draft, Step, stream_ask
 from pageindex_rag.errors import friendly_error
-from pageindex_rag.indexing import DEFAULT_PRESET, PRESET_NAMES, Estimate, build_index, enrich_index, estimate_index
+from pageindex_rag.indexing import (
+    DEFAULT_PRESET,
+    PRESET_NAMES,
+    Estimate,
+    IndexingCancelled,
+    build_index,
+    enrich_index,
+    estimate_index,
+)
 from pageindex_rag.indexing.estimate import count_describable_images
 from pageindex_rag.indexing.options import PRESET_DESCRIPTIONS, PRESET_LABELS, matching_preset, preset_options
 from pageindex_rag.indexing.pipeline import make_doc_id
@@ -36,6 +45,21 @@ DRAFT_INTERVAL = 0.08  # seconds between streamed-text updates sent to the brows
 TREE_OPTIONS = ("split_large", "max_leaf_tokens", "small_sections", "min_leaf_tokens")  # changing these rebuilds the tree
 MAX_LEAF_CHOICES = sorted({"500", "1000", "2000", "4000", str(settings.max_leaf_tokens)}, key=int)
 MIN_LEAF_CHOICES = sorted({"0", "50", "100", "150", "300", str(settings.min_leaf_tokens)}, key=int)
+
+
+@dataclasses.dataclass
+class IndexingJob:
+    """A running "Index it" for one session. Kept outside the state: Reflex state cannot hold events or locks.
+
+    `cancel` asks the job to stop. `lock` is held while the job saves and while "End session" deletes
+    the session folder, so a job can never save into (and so recreate) a folder that was just deleted.
+    """
+
+    cancel: threading.Event = dataclasses.field(default_factory=threading.Event)
+    lock: threading.Lock = dataclasses.field(default_factory=threading.Lock)
+
+
+_jobs: dict[str, IndexingJob] = {}  # session token -> its running job
 
 
 def image_url(scope: str, doc_id: str, relative: str) -> str:
@@ -270,8 +294,15 @@ class State(rx.State):
 
     @rx.event
     def end_session(self):
-        """Delete everything this visitor added, and forget their key."""
-        sessions.delete(self._token())
+        """Delete everything this visitor added, stop any indexing that uses their key, and forget the key."""
+        token = self._token()
+        job = _jobs.get(token)
+        if job is None:
+            sessions.delete(token)
+        else:
+            with job.lock:  # brief: the job only holds it while it saves
+                job.cancel.set()  # no new Claude call starts; the few already sent finish and are discarded
+                sessions.delete(token)
         self._api_key = ""
         self.key_set = False
         self.key_error = ""
@@ -279,9 +310,12 @@ class State(rx.State):
         self.thinking = False
         self.upload_error = ""
         self.indexing = False
+        self.index_done = self.index_total = 0
+        self.index_label = ""
         self._clear_pending(delete_files=False)
         self._refresh()
-        return rx.toast.info("Session ended. Your uploads and chat were deleted.")
+        stopped = " Indexing was stopped." if job else ""
+        return rx.toast.info(f"Session ended. Your uploads and chat were deleted.{stopped}")
 
     # ---- API key ----
 
@@ -457,6 +491,7 @@ class State(rx.State):
             self.index_done = 0
             self.index_total = total
             self.index_label = "Starting"
+            job = _jobs[token] = IndexingJob()
 
         store = sessions.store(token)
         progress = {"done": 0, "total": total, "label": "Starting"}
@@ -466,10 +501,15 @@ class State(rx.State):
 
         def run(index: DocumentIndex) -> DocumentIndex:
             if index.options != options:  # e.g. switched between previews and summaries after the upload
+                if job.cancel.is_set():
+                    raise IndexingCancelled
                 index = build_index(source, store, settings, options)
             if options.uses_llm:
-                enrich_index(index, store, settings, key, on_progress, options)
-            store.save_index(index)
+                enrich_index(index, store, settings, key, on_progress, options, cancel=job.cancel)
+            with job.lock:
+                if job.cancel.is_set():
+                    raise IndexingCancelled
+                store.save_index(index)
             return index
 
         work = asyncio.create_task(asyncio.to_thread(run, index))
@@ -477,13 +517,27 @@ class State(rx.State):
         try:
             while not work.done():
                 await asyncio.wait({work}, timeout=0.4)
+                if job.cancel.is_set():
+                    continue  # the session was ended: its page state is no longer this job's to update
                 async with self:
                     self.index_done, self.index_total, self.index_label = progress["done"], progress["total"], progress["label"]
             index = work.result()  # raises if an LLM call failed
         except Exception as exc:
-            error = friendly_error(exc)
-            if not isinstance(exc, (OSError, ValueError)):
-                log.warning("Indexing failed: %s", type(exc).__name__)
+            if not job.cancel.is_set():
+                error = friendly_error(exc)
+                if not isinstance(exc, (OSError, ValueError)):
+                    log.warning("Indexing failed: %s", type(exc).__name__)
+        finally:
+            if _jobs.get(token) is job:
+                del _jobs[token]
+
+        if job.cancel.is_set():
+            # "End session" already reset the page and deleted the folder. A rebuild may have written image
+            # files after that; remove them unless the visitor has started a new session since.
+            with job.lock:
+                if sessions.get(token) is None:
+                    sessions.delete(token)
+            return
 
         async with self:
             self.indexing = False

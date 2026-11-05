@@ -1,6 +1,7 @@
 """LLM passes at index time: image descriptions and bottom-up node summaries."""
 
 import base64
+import threading
 from collections import defaultdict
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -24,6 +25,16 @@ MAX_VISION_SIDE = 1568  # larger images are shrunk first (the API's recommended 
 MAX_VISION_BYTES = 5 * 1024 * 1024
 
 OnStep = Callable[[str], None]
+
+
+class IndexingCancelled(Exception):
+    """Indexing was stopped on request (for example the visitor ended their session)."""
+
+
+def check_cancelled(cancel: threading.Event | None) -> None:
+    """Raise IndexingCancelled if a stop was requested. Called before every Claude call."""
+    if cancel is not None and cancel.is_set():
+        raise IndexingCancelled
 SummaryLength = Literal["short", "detailed"]
 # Output caps per call. The prompt sets the length; these only stop a runaway reply.
 SUMMARY_MAX_TOKENS: dict[str, int] = {"short": 256, "detailed": 512}
@@ -77,12 +88,21 @@ def prepare_for_vision(data: bytes) -> tuple[bytes, str] | None:
 
 
 def describe_images(
-    images: list[ImageRecord], doc_dir: Path, llm: BaseChatModel, workers: int = 6, on_step: OnStep | None = None
+    images: list[ImageRecord],
+    doc_dir: Path,
+    llm: BaseChatModel,
+    workers: int = 6,
+    on_step: OnStep | None = None,
+    cancel: threading.Event | None = None,
 ) -> None:
-    """Fill in description and tags for each image worth describing."""
+    """Fill in description and tags for each image worth describing.
+
+    Setting `cancel` stops it: calls already sent finish, no new one starts, and IndexingCancelled is raised.
+    """
     model = llm.with_structured_output(_ImageDescription)
 
     def describe(record: ImageRecord) -> None:
+        check_cancelled(cancel)
         data = (doc_dir / record.file).read_bytes()
         prepared = prepare_for_vision(data) if should_describe(record, data) else None
         if prepared is None:
@@ -113,10 +133,12 @@ def summarize_tree(
     on_step: OnStep | None = None,
     max_chars: int = 12000,
     length: SummaryLength = "detailed",
+    cancel: threading.Event | None = None,
 ) -> None:
     """Summarize every node, deepest level first, so parents are summarized from their children.
 
-    Nodes on one level do not depend on each other, so each level runs in parallel.
+    Nodes on one level do not depend on each other, so each level runs in parallel. Setting `cancel`
+    stops it: calls already sent finish, no new one starts, and IndexingCancelled is raised.
     """
     model = llm.with_structured_output(_SUMMARY_SCHEMAS[length])
     descriptions = {record.id: record.description for record in images}
@@ -129,6 +151,7 @@ def summarize_tree(
         pending.extend((child, depth + 1) for child in node.children)
 
     def summarize(node: Node) -> None:
+        check_cancelled(cancel)
         result = model.invoke(_prompt(node, descriptions, max_chars, length))
         node.summary = result.summary
         node.summary_source = "llm"
@@ -139,6 +162,7 @@ def summarize_tree(
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
         for depth in sorted(levels, reverse=True):
+            check_cancelled(cancel)
             list(pool.map(summarize, levels[depth]))
 
 

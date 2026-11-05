@@ -7,6 +7,7 @@ It is deliberately simple: the point is to exercise the app, not to answer well.
 """
 
 import json
+import os
 import re
 import time
 import uuid
@@ -41,6 +42,8 @@ def tool_call(name: str, **args) -> AIMessage:
 
 
 def structured(schema, prompt):
+    # Optional slowness for indexing calls, so a test can act while indexing is still running.
+    time.sleep(float(os.environ.get("PAGEINDEX_FAKE_INDEX_DELAY", "0")))
     if schema.__name__ == "_ImageDescription":
         return schema(description="A bar chart with four colored bars of different heights.", tags=["chart", "bars"])
     title = re.search(r"Section title: (.*)", prompt).group(1)

@@ -204,6 +204,8 @@ Reflex turns every public method of a state class into an event handler; a leadi
 
 **`end_session`**: the "End session and delete my data" button. Deletes the visitor's whole session folder (`sessions.delete`), clears the key and chat and any pending upload, refreshes, and returns a confirmation toast. Everything the visitor added is gone, immediately.
 
+If an "Index it" is running, `end_session` also **stops it**, so the visitor's key is not spent after they asked to leave. Each running job is an `IndexingJob` in the module-level `_jobs` dict (keyed by session token; it lives outside the state because Reflex state cannot hold a `threading.Event` or a lock). `end_session` sets the job's `cancel` event and deletes the folder while holding the job's `lock`. `enrich_index` checks `cancel` before every Claude call, so the calls already sent (at most `index_workers`) finish and nothing new starts. The job saves only while holding the same lock, after checking `cancel`, so it can never save into, and so recreate, the deleted folder. A cancelled job then leaves the page state alone: the visitor may already have started a new upload in the same tab. The toast says "Indexing was stopped." 
+
 **`save_key(form_data)`**:
 ```python
 key = str(form_data.get("api_key", "")).strip()

@@ -157,3 +157,51 @@ def test_budget_options_skip_images_and_ask_for_short_summaries(tmp_path, settin
     assert caps == [{"max_tokens": 256}]
     assert "short sentences" in next(iter(llm.prompts.values()))
     assert index.options.summary_length == "short"
+
+
+def test_a_stop_before_indexing_makes_no_claude_calls(tmp_path, settings, monkeypatch):
+    import threading
+
+    from pageindex_rag.indexing import IndexingCancelled
+
+    store, index = make_doc(tmp_path, settings)
+    llm = FakeLLM()
+    monkeypatch.setattr("pageindex_rag.llm.chat_model", lambda model, api_key=None, **kw: llm)
+    cancel = threading.Event()
+    cancel.set()
+    try:
+        enrich_index(index, store, settings, cancel=cancel)
+    except IndexingCancelled:
+        pass
+    else:
+        raise AssertionError("expected IndexingCancelled")
+    assert llm.image_calls == 0 and llm.prompts == {}
+
+
+def test_a_stop_during_indexing_starts_no_new_calls(tmp_path, settings, monkeypatch):
+    import dataclasses
+    import threading
+
+    from pageindex_rag.indexing import IndexingCancelled
+
+    one_worker = dataclasses.replace(settings, index_workers=1)  # one call at a time, so the count is exact
+    store, index = make_doc(tmp_path, one_worker)
+    llm = FakeLLM()
+    monkeypatch.setattr("pageindex_rag.llm.chat_model", lambda model, api_key=None, **kw: llm)
+    cancel = threading.Event()
+    steps = []
+
+    def on_progress(done, total, label):
+        steps.append(label)
+        if len(steps) == 2:
+            cancel.set()  # e.g. the visitor pressed "End session" here
+
+    try:
+        enrich_index(index, store, one_worker, on_progress=on_progress, cancel=cancel)
+    except IndexingCancelled:
+        pass
+    else:
+        raise AssertionError("expected IndexingCancelled")
+    total = estimate_index(index, store).calls
+    assert len(steps) == 2 < total  # nothing ran after the stop
+    assert llm.image_calls + len(llm.prompts) == 2
