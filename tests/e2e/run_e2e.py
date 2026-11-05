@@ -115,6 +115,11 @@ def main() -> int:
         kill_tree(server)
         shutil.rmtree(work, ignore_errors=True)
 
+    # Reflex reports exceptions in its own frontend code to the server terminal, not the browser console.
+    server_log = log_path.read_bytes().decode("utf-8", "replace")
+    frontend_errors = [line.strip() for line in server_log.splitlines() if "Frontend Exception" in line or "Error:" in line]
+    results.append(("no frontend exceptions in the server log", not frontend_errors, "; ".join(frontend_errors[:3])[:300]))
+
     print()
     for name, ok, detail in results:
         print(("PASS  " if ok else "FAIL  ") + name + (f"  [{detail}]" if detail and not ok else ""))

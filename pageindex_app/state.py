@@ -375,11 +375,9 @@ class State(rx.State):
             kind = validate_upload(name, data, settings.max_upload_bytes)
         except UploadError as exc:
             self.upload_error = str(exc)
-            yield rx.clear_selected_files(UPLOAD_ID)
             return
         if kind == "pdf":
             self.upload_error = "PDF indexing is not available yet. Word (.docx) files work."
-            yield rx.clear_selected_files(UPLOAD_ID)
             return
 
         library = self._library()
@@ -416,7 +414,8 @@ class State(rx.State):
         self.pending_name = index.title
         self._cache_estimates(index)
         self._refresh()
-        yield rx.clear_selected_files(UPLOAD_ID)
+        # No rx.clear_selected_files here: the drop zone sends the file straight away (on_drop), so it keeps
+        # no list of selected files, and asking to clear one is a frontend error.
 
     # ---- indexing options ----
 
