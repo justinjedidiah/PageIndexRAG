@@ -88,17 +88,30 @@ def key_card() -> rx.Component:
 def doc_row(doc: DocView) -> rx.Component:
     return rx.hstack(
         rx.vstack(
-            rx.hstack(
-                rx.text(doc.title, size="2", weight="medium", word_break="break-word"),
-                rx.cond(doc.sample, rx.badge("sample", size="1", variant="soft", color_scheme="amber")),
-                align="center",
-                wrap="wrap",
+            # One line: a long name ends in "..." and shows in full on hover.
+            rx.text(
+                doc.title,
+                size="2",
+                weight="medium",
+                white_space="nowrap",
+                overflow="hidden",
+                text_overflow="ellipsis",
+                max_width="100%",
+                title=doc.title,
             ),
-            rx.text(doc.kind, **MUTED),
+            # Plain text, not a badge, so "sample" lines up with the file type.
+            rx.hstack(
+                rx.cond(doc.sample, rx.text("sample", size="1", weight="medium", color_scheme="amber")),
+                rx.cond(doc.sample, rx.text("·", **MUTED)),
+                rx.text(doc.kind, **MUTED),
+                spacing="1",
+                align="center",
+            ),
             spacing="0",
             align="start",
+            flex="1",
+            min_width="0",  # lets the title shrink and truncate instead of pushing the buttons out
         ),
-        rx.spacer(),
         rx.button("Browse", size="1", variant="soft", color_scheme="gray", on_click=State.open_browse(doc.doc_id)),
         rx.cond(
             ~doc.sample,
@@ -113,7 +126,8 @@ def doc_row(doc: DocView) -> rx.Component:
         ),
         width="100%",
         align="center",
-        padding_y="0.55em",
+        spacing="2",
+        padding_y="0.4em",
         border_top=BORDER,
     )
 
