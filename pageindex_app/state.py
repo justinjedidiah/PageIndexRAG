@@ -365,8 +365,7 @@ class State(rx.State):
         self.upload_error = ""
         if self.building or self.indexing or self.has_pending:
             return
-        if not files:
-            self.upload_error = "Choose a file first."
+        if not files:  # the drop zone already refused the file (wrong type or too big) and said so
             return
 
         upload = files[0]

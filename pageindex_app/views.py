@@ -151,33 +151,39 @@ def library_card() -> rx.Component:
 
 
 def upload_form() -> rx.Component:
+    """A drop zone that starts reading the file as soon as one is chosen or dropped: no separate Upload button."""
     return rx.vstack(
         rx.upload(
-            rx.vstack(
-                rx.icon("upload", size=22),
-                rx.text("Drop a .docx or .pdf here, or click to choose", size="2", text_align="center"),
-                rx.text(f"Up to {settings.max_upload_bytes // (1024 * 1024)} MB. ZIP files are not accepted.", **MUTED),
-                align="center",
-                spacing="1",
+            rx.cond(
+                State.building,
+                rx.vstack(
+                    rx.spinner(size="2"),
+                    rx.text("Reading the document...", size="2", text_align="center"),
+                    align="center",
+                    spacing="2",
+                ),
+                rx.vstack(
+                    rx.icon("upload", size=22),
+                    rx.text("Drop a .docx or .pdf here, or click to choose", size="2", text_align="center"),
+                    rx.text(f"Up to {settings.max_upload_bytes // (1024 * 1024)} MB. ZIP files are not accepted.", **MUTED),
+                    align="center",
+                    spacing="1",
+                ),
             ),
             id=UPLOAD_ID,
             accept=ACCEPTED,
             max_files=1,
             max_size=settings.max_upload_bytes,
             multiple=False,
+            on_drop=State.handle_upload,
+            disabled=State.building,
             padding="1em",
             border="1px dashed var(--gray-7)",
             border_radius="12px",
             background="var(--gray-2)",
             width="100%",
-        ),
-        rx.text(rx.selected_files(UPLOAD_ID), size="1"),
-        rx.button(
-            "Upload",
-            on_click=State.handle_upload(rx.upload_files(upload_id=UPLOAD_ID)),
-            loading=State.building,
-            width="100%",
-            **PRIMARY,
+            cursor=rx.cond(State.building, "progress", "pointer"),
+            _hover={"border_color": "var(--gray-9)", "background": "var(--gray-3)"},
         ),
         rx.text("You choose how to index it (and see the cost) before anything is spent.", **MUTED),
         spacing="2",

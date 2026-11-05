@@ -187,7 +187,6 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
             plain = work / "Heron Notes.docx"
             make_plain_docx(plain)
             page.set_input_files("input[type=file]", str(plain))
-            page.get_by_role("button", name="Upload").click()
             expect(page.locator("[data-preset=full]")).to_be_visible(timeout=30000)
             # The default (Full) needs a key, so indexing is blocked until Free is chosen.
             expect(page.get_by_role("button", name="Index it")).to_be_disabled()
@@ -275,16 +274,23 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
             fake = work / "fake.docx"
             fake.write_text("this is not really a word document")
             page.set_input_files("input[type=file]", str(fake))
-            page.get_by_role("button", name="Upload").click()
             expect(page.get_by_text("not a valid Word")).to_be_visible(timeout=20000)
 
         step("a fake .docx is refused by content", bad_content)
+
+        def drop_zone_is_the_button() -> None:
+            # Choosing a file starts the upload by itself, so there is no separate Upload button,
+            # and the drop zone shows a pointer like any other clickable thing.
+            expect(page.get_by_role("button", name="Upload", exact=True)).to_have_count(0)
+            cursor = page.evaluate("getComputedStyle(document.querySelector('.rx-Upload')).cursor")
+            assert cursor == "pointer", f"the drop zone's cursor is {cursor!r}"
+
+        step("the drop zone uploads on its own and shows a pointer", drop_zone_is_the_button)
 
         def upload_real() -> None:
             mine = work / "Pelican Care Guide.docx"
             make_user_docx(mine)
             page.set_input_files("input[type=file]", str(mine))
-            page.get_by_role("button", name="Upload").click()
             expect(page.locator("[data-preset=full]")).to_be_visible(timeout=30000)
             page.locator("[data-preset=budget]").click()
             detail = page.locator("#pending-detail")
@@ -333,7 +339,6 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
             long_doc = work / "Long Report.docx"
             make_long_docx(long_doc)
             page.set_input_files("input[type=file]", str(long_doc))
-            page.get_by_role("button", name="Upload").click()
             page.locator("[data-preset=full]").click(timeout=30000)
             page.get_by_role("button", name="Index it").click()
             expect(page.get_by_text("Indexing with your key...")).to_be_visible(timeout=15000)
