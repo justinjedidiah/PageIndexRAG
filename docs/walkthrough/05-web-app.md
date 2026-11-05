@@ -43,12 +43,12 @@ class ChatMessage:
     citations: list[CitationView] = dataclasses.field(default_factory=list)
     images: list[ImageView] = dataclasses.field(default_factory=list)
     found: bool = True
-    pending: bool = False
+    error: bool = False
 ```
 
 Small dataclasses (`DocView`, `CitationView`, `ImageView`, `ChatMessage`, `OutlineRowView`) with **plain typed fields**. The page needs to loop over lists and read each item's fields; Reflex can do that when the items are dataclasses with declared types. They are *view* models: only what the screen needs, not the full core objects (a `Citation` from the agent becomes a `CitationView`).
 
-A `ChatMessage` is one bubble: a user message (just `text`), or an assistant message that fills in over time: `pending=True` while working, `steps` accumulating the navigation labels, then the final `text`, `citations`, `images`. `found=False` marks a reply with no citations (shown in grey, still rendered as Markdown). `error=True` marks text the app wrote rather than the model (a failed call, an empty library, a refusal notice, a used-up step budget); only those are left out of the history sent back to the agent. Real replies are kept, cited or not, so follow-ups like "tell me more about p3" have their context.
+A `ChatMessage` is one finished bubble: a user message (just `text`), or a finished answer with its `steps` (the navigation path), `text`, `citations` and `images`. The answer still being written is not a `ChatMessage` yet: it lives in `live_steps` and `live_text` (see `ask` below). `found=False` marks a reply with no citations (shown in grey, still rendered as Markdown). `error=True` marks text the app wrote rather than the model (a failed call, an empty library, a refusal notice, a used-up step budget); only those are left out of the history sent back to the agent. Real replies are kept, cited or not, so follow-ups like "tell me more about p3" have their context.
 
 ## `files.py`: serving images
 
@@ -129,7 +129,7 @@ def image_url(scope, doc_id, relative):
 ```
 Builds the full URL of an image. The page (served by Reflex's front end on one port) and the image route (on the back end port) are different addresses in development, so the back end's address (`api_url`) is included.
 
-`pending_path(token)` = the visitor's `pending.json` file (explained under `handle_upload`). `scroll_chat()` returns a small piece of JavaScript (`rx.call_script`) that scrolls the page so the newest message is in view; it targets the invisible `chat-end` element at the bottom of the chat.
+`pending_path(token)` = the visitor's `pending.json` file (explained under `handle_upload`). `scroll_chat(force=False)` returns a small piece of JavaScript (`rx.call_script`) that scrolls the chat so the newest text is in view; it targets the invisible `chat-end` element at the bottom of the chat. It only scrolls if the visitor is already within 250 px of the bottom, so someone who scrolled up to re-read an earlier answer is not pulled down while a new one streams. `force=True` (used when they send a question) scrolls anyway.
 
 ### The variables
 
@@ -192,11 +192,7 @@ Reflex turns every public method of a state class into an event handler; a leadi
 - `_library()`: the visitor's `Library` (samples + their live session documents).
 - `_refresh()`: re-reads the library into `self.docs` and rewrites the `session_note` text ("Your uploads are deleted automatically in 1 hour 52 minutes" if a session exists, else "...2 hours after you add the first one").
 - `_clear_pending(delete_files)`: forgets the pending document; with `delete_files=True` it also deletes its images, upload and `pending.json` (used on cancel and on failure).
-- `_replace_last(**changes)`: updates the last chat message:
-  ```python
-  self.messages = [*self.messages[:-1], dataclasses.replace(self.messages[-1], **changes)]
-  ```
-  It builds a *new* list with a modified copy of the last message and **assigns** it. That matters: Reflex notices changes when a field is *assigned*; quietly changing something inside a list may not be noticed, and the page would not update.
+- `_finish_answer(generation, message)`: adds a finished answer to `messages` and clears the live answer and `thinking`, all in one update so the live bubble and the finished one never show together. It does nothing if the chat was cleared (End session bumps `_chat_generation`) while the answer was being written. Like every list change here, it **assigns** a new list (`self.messages = [*self.messages, message]`): Reflex notices changes when a field is assigned; changing something inside a list in place may not be noticed.
 
 ### The handlers, one by one
 
@@ -294,7 +290,9 @@ The real indexing (stage 2 from file 02) runs on a helper thread as a task. The 
 
 **`ask_example(question)`** returns `State.ask({"question": question})`: it chains into the normal `ask` handler as if the visitor had typed it.
 
-**`ask(form_data)`**: the heart of the chat. A background handler:
+**`ask(form_data)`**: the heart of the chat. A background handler.
+
+**Why the answer being written is kept apart.** Reflex sends a changed variable to the browser in full. If the streaming answer were the last item of `messages`, every update (about ten a second) would re-send the whole conversation, and that cost grows with every question asked. Measured with the offline model: question 1 received 12.8 KB while it streamed, question 15 received 209.5 KB. So the answer being written lives in two small variables, `live_steps` and `live_text`, shown by `live_answer()` below the finished messages while `thinking` is true, and joins `messages` once, when it is done. With that, question 15 receives 38.4 KB; what is left is the two times per question the message list itself changes (the question added, the answer added), not a cost per streamed word.
 
 ```python
 async with self:
@@ -302,48 +300,49 @@ async with self:
         return
     key, token = self._api_key, self._token()
     history = [ChatTurn(role=m.role, content=m.text) for m in self.messages
-               if m.text and not m.pending and (m.role == "user" or m.found)][-MAX_HISTORY_TURNS * 2 :]
+               if m.text and (m.role == "user" or not m.error)][-MAX_HISTORY_TURNS * 2 :]
+    generation = self._chat_generation
     self.thinking = True
-    self.messages = [*self.messages, ChatMessage(role="user", text=question), ChatMessage(role="assistant", pending=True)]
-yield scroll_chat()
+    self.live_steps, self.live_text = [], ""
+    self.messages = [*self.messages, ChatMessage(role="user", text=question)]
+yield scroll_chat(force=True)
 ```
-Inside the lock: refuse if already answering or no key; build the **history** to give the agent (earlier finished messages with text, excluding app-written error replies; only the last 12 messages = 6 question/answer pairs); mark `thinking`; append the visitor's bubble and an empty **pending** assistant bubble (which the page shows as "Working..."); scroll.
+Inside the lock: refuse if already answering or no key; build the **history** to give the agent (earlier finished messages with text, excluding app-written error replies; only the last 12 messages = 6 question/answer pairs); remember which chat this answer belongs to (`generation`); mark `thinking` (the page shows the live answer, "Working..." until text arrives); add the visitor's bubble; scroll.
 
 ```python
-library = Library.for_session(settings, sessions, token)
-indexes = library.indexes()
-if not indexes:
-    raise EmptyLibrary
-events = stream_ask(indexes, question, settings, history, api_key=key)
-last_draft = 0.0
+events = stream_ask(indexes, question, chat_settings, history, api_key=key)
 while (event := await asyncio.to_thread(next, events, None)) is not None:
     if isinstance(event, Step):
+        steps.append(StepView(event.label, event.note))
         async with self:
-            self._replace_last(steps=[*self.messages[-1].steps, event.label], text="")
+            if self._chat_generation != generation:
+                return                       # the chat was cleared meanwhile
+            self.live_steps = list(steps)
+            self.live_text = ""
     elif isinstance(event, Draft):
         if time.monotonic() - last_draft < DRAFT_INTERVAL:
             continue
         last_draft = time.monotonic()
         async with self:
-            self._replace_last(text=event.text)
+            ...
+            self.live_text = event.text
     else:
-        fields = _answer_fields(event, library, token)
+        message = ChatMessage(role="assistant", steps=list(steps), **_answer_fields(event, library, token))
         async with self:
-            self._replace_last(**fields)
+            self._finish_answer(generation, message)
     yield scroll_chat()
 ```
-Outside the lock it loads the documents and starts the agent's event stream (file 03). The agent code makes slow network calls **inside** `next(events)`, so each `next` is run on a helper thread (`asyncio.to_thread(next, events, None)`; the `None` is what `next` returns when the stream ends). Each event is a `Step` (append a `StepView(label, note)` to the bubble: this is how "How I found this" grows live, with the model's one-line note in italics above its step; any draft text is cleared because the step now carries it), a `Draft` (the answer text so far: put it in the bubble, so the answer types out), or the final `AnswerResult` (turned into text/citations/images and stored, replacing the draft). Drafts can arrive many times a second, so any that come less than `DRAFT_INTERVAL` (0.08 s) after the last one are skipped; nothing is lost because the next draft or the final answer contains the full text. Each update is followed by a scroll. `:=` is the walrus operator (assign and test in the same expression).
+Outside the lock it loads the documents and starts the agent's event stream (file 03). The agent code makes slow network calls **inside** `next(events)`, so each `next` is run on a helper thread (`asyncio.to_thread(next, events, None)`; the `None` is what `next` returns when the stream ends). Each event is a `Step` (add a `StepView(label, note)` to the live answer: this is how the navigation path grows live, with the model's one-line note above its step; any draft text is cleared because the step now carries it), a `Draft` (the answer text so far, so the answer types out), or the final `AnswerResult` (turned into a finished `ChatMessage` with the steps, text, citations and images, and added to the chat by `_finish_answer`). Drafts can arrive many times a second, so any that come less than `DRAFT_INTERVAL` (0.08 s) after the last one are skipped; nothing is lost because the next draft or the final answer contains the full text. Each update is followed by a (non-forced) scroll. `:=` is the walrus operator (assign and test in the same expression).
 
 ```python
-except EmptyLibrary: ...  "There are no documents to search yet."
-except Exception as exc:  ...  friendly_error(exc)
+except EmptyLibrary: ...  _finish_answer(generation, ChatMessage(..., "There are no documents to search yet.", error=True))
+except Exception as exc:  ...  _finish_answer(generation, ChatMessage(..., friendly_error(exc), error=True))
 finally:
     async with self:
-        self.thinking = False
-        if self.messages and self.messages[-1].pending:
-            self._replace_last(pending=False)
+        if self._chat_generation == generation and self.thinking:
+            self._finish_answer(generation, None)
 ```
-Errors become a grey message in the assistant bubble (a custom `EmptyLibrary` exception is used instead of a built-in one so unrelated errors can't be mistaken for it). `finally` guarantees `thinking` is switched off and the "Working..." spinner is cleared **no matter what happened**, so the input box can never get stuck disabled.
+Errors become a grey assistant message flagged `error` (a custom `EmptyLibrary` exception is used instead of a built-in one so unrelated errors can't be mistaken for it). `finally` guarantees `thinking` is switched off and the live answer cleared **no matter what happened**, so the input box can never get stuck disabled, unless the chat was cleared meanwhile, in which case End session already did that.
 
 **`_answer_fields(result, library, token)`** turns the agent's `AnswerResult` into the fields of the bubble: text, found flag, citations as `CitationView` (the click target `ref` = `doc_id:node_id`) and images as `ImageView` with their URLs (each image's scope is `sample` or the visitor's token).
 
@@ -387,7 +386,8 @@ Renders text as Markdown (answers, section text) with table borders and images t
 
 - A scrolling area containing: `empty_chat()` (instructions, and the four sample-question cards) **only while there are no messages**; the messages (`rx.foreach(State.messages, message_view)`); and an invisible box with `id="chat-end"` that the scroll script targets.
 - `message_view`: `rx.cond(message.role == "user", <bubble on the right>, assistant_message(message))`.
-- `assistant_message` stacks, in order: the steps (`rx.foreach(message.steps, step_line)`, only when there are any): each is the model's one-line note as normal text, then a small grey line saying what it did, so the message reads like a conversation; a spinner and "Working..." while `pending` and still no text; the answer (`prose` if `found`, grey plain text if not); the images; and the **citation chips** (each one `on_click=State.open_source(citation.ref)`).
+- `live_answer` is the answer being written, shown under the messages while `thinking`: its steps so far, then a spinner and "Working..." until text arrives, then the text as it streams.
+- `assistant_message` (a finished answer) stacks, in order: the steps (`rx.foreach(message.steps, step_line)`, only when there are any): each is the model's one-line note as normal text, then a small grey line saying what it did, so the message reads like a conversation; the answer (`prose` if `found`, grey plain text if not); the images; and the **citation chips** (each one `on_click=State.open_source(citation.ref)`).
 - `composer`: a form with the text input named `question`, sending `State.ask` on submit and clearing itself (`reset_on_submit`). The input and the arrow button are disabled when `can_chat` is false.
 
 ### Right column (`source_panel`)

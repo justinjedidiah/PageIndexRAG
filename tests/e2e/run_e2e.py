@@ -256,6 +256,21 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
 
         step("an image question shows the picture inline", ask_image, "06-image.png")
 
+        def scrolled_up_stays_up() -> None:
+            viewport = "document.getElementById('chat-end').closest('[data-radix-scroll-area-viewport]')"
+            answers_before = page.locator("text=Answered by the offline test model").count()
+            box = page.get_by_placeholder("Ask a question about the documents")
+            box.fill("How often should I clean my solar panels?")
+            box.press("Enter")
+            expect(page.get_by_text("Working...")).to_be_visible(timeout=15000)
+            page.evaluate(f"{viewport}.scrollTop = 0")  # the visitor scrolls up to re-read while it streams
+            expect(page.locator("text=Answered by the offline test model")).to_have_count(answers_before + 1, timeout=60000)
+            page.wait_for_timeout(800)
+            top = page.evaluate(f"{viewport}.scrollTop")
+            assert top < 50, f"the chat was scrolled back down to {top}px while the visitor was reading above"
+
+        step("scrolling up while an answer streams is not undone", scrolled_up_stays_up)
+
         def bad_content() -> None:
             fake = work / "fake.docx"
             fake.write_text("this is not really a word document")

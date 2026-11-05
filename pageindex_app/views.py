@@ -371,13 +371,24 @@ def step_line(step: StepView) -> rx.Component:
     )
 
 
+def live_answer() -> rx.Component:
+    """The answer being written: its steps so far, then its text, or "Working..." before any text."""
+    return rx.vstack(
+        rx.cond(State.live_steps.length() > 0, rx.vstack(rx.foreach(State.live_steps, step_line), spacing="2", align="start")),
+        rx.cond(
+            State.live_text == "",
+            rx.hstack(rx.spinner(size="1"), rx.text("Working...", size="2", color_scheme="gray"), align="center"),
+            prose(text=State.live_text),
+        ),
+        spacing="3",
+        align="start",
+        max_width="95%",
+    )
+
+
 def assistant_message(message: ChatMessage) -> rx.Component:
     return rx.vstack(
         rx.cond(message.steps.length() > 0, rx.vstack(rx.foreach(message.steps, step_line), spacing="2", align="start")),
-        rx.cond(
-            message.pending & (message.text == ""),
-            rx.hstack(rx.spinner(size="1"), rx.text("Working...", size="2", color_scheme="gray"), align="center"),
-        ),
         rx.cond(
             message.text != "",
             # Uncited replies (no answer found, errors, or questions about the outline itself) are grey, but
@@ -509,6 +520,7 @@ def chat_panel() -> rx.Component:
             rx.vstack(
                 rx.cond(State.messages.length() > 0, rx.fragment(), empty_chat()),
                 rx.foreach(State.messages, message_view),
+                rx.cond(State.thinking, live_answer()),
                 rx.box(id="chat-end"),
                 spacing="5",
                 width="100%",

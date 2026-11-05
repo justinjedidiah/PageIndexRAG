@@ -70,8 +70,18 @@ def pending_path(token: str) -> Path:
     return sessions.session_dir(token) / "pending.json"
 
 
-def scroll_chat() -> rx.event.EventSpec:
-    return rx.call_script("document.getElementById('chat-end')?.scrollIntoView({behavior: 'smooth', block: 'end'})")
+def scroll_chat(force: bool = False) -> rx.event.EventSpec:
+    """Keep the newest text in view, but only if the visitor is already near the bottom.
+
+    Someone who scrolled up to re-read an earlier answer is not pulled down while a new one streams.
+    `force` scrolls anyway (used when they send a question).
+    """
+    return rx.call_script(
+        "(() => { const end = document.getElementById('chat-end'); if (!end) return;"
+        " const view = end.closest('[data-radix-scroll-area-viewport]');"
+        f" if ({'false' if force else 'true'} && view && view.scrollHeight - view.scrollTop - view.clientHeight > 250) return;"
+        f" end.scrollIntoView({{behavior: '{'smooth' if force else 'auto'}', block: 'end'}}); }})()"
+    )
 
 
 class State(rx.State):
@@ -86,8 +96,13 @@ class State(rx.State):
     has_samples: bool = False
     session_note: str = ""
 
-    messages: list[ChatMessage] = []
+    messages: list[ChatMessage] = []  # finished messages only; changes once per question and once per answer
     thinking: bool = False
+    # The answer being written. Kept apart from `messages` so each streamed update sends only this, not
+    # the whole conversation again (Reflex sends a changed list in full). Added to `messages` when done.
+    live_steps: list[StepView] = []
+    live_text: str = ""
+    _chat_generation: int = 0  # bumped when the chat is cleared, so an answer still streaming is dropped
 
     upload_error: str = ""
     building: bool = False
@@ -282,9 +297,6 @@ class State(rx.State):
                 self.rebuilding = False
         self._cache_estimates(index)
 
-    def _replace_last(self, **changes: Any) -> None:
-        self.messages = [*self.messages[:-1], dataclasses.replace(self.messages[-1], **changes)]
-
     # ---- page load and session ----
 
     @rx.event
@@ -308,6 +320,9 @@ class State(rx.State):
         self.key_error = ""
         self.messages = []
         self.thinking = False
+        self.live_steps = []
+        self.live_text = ""
+        self._chat_generation += 1
         self.upload_error = ""
         self.indexing = False
         self.index_done = self.index_total = 0
@@ -619,12 +634,16 @@ class State(rx.State):
             history = [
                 ChatTurn(role=m.role, content=m.text)
                 for m in self.messages
-                if m.text and not m.pending and (m.role == "user" or not m.error)
+                if m.text and (m.role == "user" or not m.error)
             ][-MAX_HISTORY_TURNS * 2 :]
+            generation = self._chat_generation
             self.thinking = True
-            self.messages = [*self.messages, ChatMessage(role="user", text=question), ChatMessage(role="assistant", pending=True)]
-        yield scroll_chat()
+            self.live_steps = []
+            self.live_text = ""
+            self.messages = [*self.messages, ChatMessage(role="user", text=question)]
+        yield scroll_chat(force=True)
 
+        steps: list[StepView] = []  # this answer's steps, kept here too so the final message can carry them
         try:
             library = Library.for_session(settings, sessions, token)
             indexes = library.indexes()
@@ -634,34 +653,58 @@ class State(rx.State):
             last_draft = 0.0
             while (event := await asyncio.to_thread(next, events, None)) is not None:
                 if isinstance(event, Step):
+                    steps.append(StepView(event.label, event.note))
                     async with self:
+                        if self._chat_generation != generation:
+                            return
                         # Any draft text so far was the model's note before this step; the step carries it now.
-                        self._replace_last(steps=[*self.messages[-1].steps, StepView(event.label, event.note)], text="")
+                        self.live_steps = list(steps)
+                        self.live_text = ""
                 elif isinstance(event, Draft):
                     if time.monotonic() - last_draft < DRAFT_INTERVAL:
                         continue  # the final answer replaces the text anyway; skip updates that come too fast
                     last_draft = time.monotonic()
                     async with self:
-                        self._replace_last(text=event.text)
+                        if self._chat_generation != generation:
+                            return
+                        self.live_text = event.text
                 else:
-                    fields = _answer_fields(event, library, token)
+                    message = ChatMessage(role="assistant", steps=list(steps), **_answer_fields(event, library, token))
                     async with self:
-                        self._replace_last(**fields)
+                        self._finish_answer(generation, message)
                 yield scroll_chat()
         except EmptyLibrary:
             async with self:
-                self._replace_last(text="There are no documents to search yet.", found=False, error=True, pending=False)
+                self._finish_answer(
+                    generation,
+                    ChatMessage(role="assistant", text="There are no documents to search yet.", found=False, error=True),
+                )
         except Exception as exc:
             if not isinstance(exc, (OSError, ValueError)):
                 log.warning("Answering failed: %s", type(exc).__name__)
             async with self:
-                self._replace_last(text=friendly_error(exc), found=False, error=True, pending=False)
+                self._finish_answer(
+                    generation,
+                    ChatMessage(role="assistant", steps=list(steps), text=friendly_error(exc), found=False, error=True),
+                )
         finally:
             async with self:
-                self.thinking = False
-                if self.messages and self.messages[-1].pending:
-                    self._replace_last(pending=False)
+                if self._chat_generation == generation and self.thinking:
+                    self._finish_answer(generation, None)  # the agent produced nothing; just stop "thinking"
         yield scroll_chat()
+
+    def _finish_answer(self, generation: int, message: ChatMessage | None) -> None:
+        """Add the finished answer to the chat and clear the live one, in a single update so nothing flickers.
+
+        Does nothing if the chat was cleared (End session) while this answer was being written.
+        """
+        if self._chat_generation != generation:
+            return
+        if message is not None:
+            self.messages = [*self.messages, message]
+        self.live_steps = []
+        self.live_text = ""
+        self.thinking = False
 
 
 class EmptyLibrary(Exception):
@@ -700,7 +743,6 @@ def _answer_fields(result: AnswerResult, library: Library, token: str) -> dict[s
         "text": result.text,
         "found": result.found,
         "error": result.error,
-        "pending": False,
         "citations": [
             CitationView(f"{c.doc_id}:{c.node_id}", c.doc_title, c.title, _where(c.title, c.location))
             for c in result.citations
