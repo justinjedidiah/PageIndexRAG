@@ -177,6 +177,15 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
 
         step("page loads with 3 sample documents and chat locked", loads, "01-loaded.png")
 
+        def tab_icon() -> None:
+            hrefs = page.eval_on_selector_all("link[rel='icon']", "links => links.map(l => l.getAttribute('href'))")
+            assert "/favicon.svg" in hrefs, f"no SVG tab icon linked: {hrefs}"
+            for href in ("/favicon.svg", "/favicon.ico"):
+                response = page.request.get(FRONTEND + href)
+                assert response.ok, f"{href} answered {response.status}"
+
+        step("the tab icon is linked and served", tab_icon)
+
         def browse_sample() -> None:
             page.get_by_role("button", name="Browse").nth(1).click()  # samples are sorted by title: the second is Meridian
             outline = page.locator("#source-panel")

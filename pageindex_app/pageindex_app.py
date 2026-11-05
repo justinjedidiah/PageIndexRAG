@@ -13,7 +13,16 @@ from .views import index
 log = logging.getLogger(__name__)
 SWEEP_EVERY_SECONDS = 300
 
-app = rx.App(api_transformer=api, stylesheets=["/app.css"])
+app = rx.App(
+    api_transformer=api,
+    stylesheets=["/app.css"],
+    head_components=[
+        # Tab icon: the header's open book. The SVG switches to a light tile in dark mode; the .ico is for
+        # browsers that only look for /favicon.ico.
+        rx.el.link(rel="icon", href="/favicon.svg", type="image/svg+xml"),
+        rx.el.link(rel="icon", href="/favicon.ico", sizes="48x48"),
+    ],
+)
 app.add_page(index, route="/", title="PageIndex RAG", on_load=State.on_load)
 
 
