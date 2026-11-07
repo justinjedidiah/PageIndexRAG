@@ -205,3 +205,18 @@ def test_a_stop_during_indexing_starts_no_new_calls(tmp_path, settings, monkeypa
     total = estimate_index(index, store).calls
     assert len(steps) == 2 < total  # nothing ran after the stop
     assert llm.image_calls + len(llm.prompts) == 2
+
+
+def test_enrich_records_the_provider_and_models_but_never_the_key(tmp_path, settings, monkeypatch):
+    from pageindex_rag.indexing import preset_options
+    from pageindex_rag.providers import LLMConfig
+
+    store, index = make_doc(tmp_path, settings)
+    monkeypatch.setattr("pageindex_rag.llm.chat_model", lambda model, api_key=None, **kw: FakeLLM())
+    llm = LLMConfig("openai", "sk-secret-123", index_model="small-model", agent_model="big-model")
+
+    enrich_index(index, store, settings, options=preset_options("budget", settings), llm=llm)
+
+    assert (index.indexed_with.provider, index.indexed_with.index_model, index.indexed_with.vision_model) == (
+        "openai", "small-model", "")  # Budget describes no images
+    assert "sk-secret-123" not in index.model_dump_json()

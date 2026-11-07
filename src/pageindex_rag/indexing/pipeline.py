@@ -12,7 +12,7 @@ from pathlib import Path
 
 from ..config import Settings
 from ..providers import LLMConfig
-from ..models import DocumentIndex, FileKind, ImageRecord, IndexOptions, TocEntry
+from ..models import DocumentIndex, FileKind, ImageRecord, IndexedWith, IndexOptions, TocEntry
 from ..storage import Store
 from .blocks import IMAGE_REF, Block, Heading
 from .docx_extract import extract_docx
@@ -100,6 +100,11 @@ def enrich_index(
     llm = llm or llm_config(settings, api_key)
     options = options or index.options or preset_options(settings=settings)
     index.options = options
+    index.indexed_with = IndexedWith(
+        provider=llm.provider,
+        index_model=llm.index_model if options.summaries == "llm" else "",
+        vision_model=llm.vision_model if options.describe_images else "",
+    ) if options.uses_llm else None
     total = estimate_index(index, store, options).calls
     done = 0
     lock = threading.Lock()  # steps finish on worker threads
@@ -163,8 +168,13 @@ def index_document(
 
 
 def make_doc_id(path: Path) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", path.stem.lower()).strip("-")[:60] or "doc"
-    digest = hashlib.sha1(path.read_bytes()).hexdigest()[:8]
+    return doc_id_for(path.stem, path.read_bytes())
+
+
+def doc_id_for(stem: str, data: bytes) -> str:
+    """A document's id: its name plus a fingerprint of its content, so the same file always gets the same id."""
+    slug = re.sub(r"[^a-z0-9]+", "-", stem.lower()).strip("-")[:60] or "doc"
+    digest = hashlib.sha1(data).hexdigest()[:8]
     return f"{slug}-{digest}"
 
 

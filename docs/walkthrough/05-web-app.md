@@ -228,15 +228,19 @@ finally:
 **`handle_upload(files)`**: the longest handler. In order:
 1. Refuse if something is already in progress, or if no file was chosen. No key is needed to upload: reading the file and building the tree are free, and the Free preset never uses a key.
 2. `name = safe_filename(upload.filename ...)` cleans the name. `data = await upload.read(settings.max_upload_bytes + 1)` reads the file **but never more than the limit plus one byte**, so an oversized upload cannot fill the server's memory; the `+1` lets the validator see "too big".
-3. `validate_upload(...)` (file 04). On refusal it shows the message and clears the selected file (`yield rx.clear_selected_files(UPLOAD_ID)`).
+3. `validate_upload(...)` (file 04). On refusal it shows the message.
 4. A PDF is refused for now ("PDF indexing is not available yet").
-5. Enforce the documents-per-session limit.
+5. `doc_id_for(name, data)` works out the document's id from its name and a fingerprint of its content, **before anything is written**, so a refused upload never starts a session (or its 2-hour clock):
+   - one of the **samples**: refused ("That's one of the sample documents, already in the library"); samples are read-only.
+   - already in **your** library: allowed. Indexing it again (perhaps with another preset or model) **replaces** that version; the pending card says so (`replace_note`, below).
+   - otherwise a new document, and the documents-per-session limit applies.
 6. `self.building = True; yield` shows the spinner. Then in a `try`:
    - `sessions.ensure(token)` creates the session folder (this is the moment the 2-hour clock starts), saves the upload into `uploads/`.
-   - `library.load(make_doc_id(path))`: if the same file (same content fingerprint) is already in the library, delete the copy and say so.
    - `build_index` (stage 1, on a helper thread) with the options currently chosen (`self._options()`).
    - `finally: self.building = False` always turns the spinner off. Any unexpected error is logged **without the document's content** and shown as a generic message.
-7. The unsummarized document is saved as `pending.json`; state remembers only its id and file name. `_show_estimates` fills `preset_choices` (one `PresetView` per preset: Free, Budget, Full, each with its own cost sentence from `estimate_index`) and `pending_detail` (the cost of the options chosen now, e.g. "12 sections, 1 image to describe. About 13 Claude calls on your key (roughly X input and Y output tokens)."). The page shows the three presets as clickable cards, an **Advanced options** toggle, that sentence, and **Index it** / **Cancel**.
+7. The unsummarized document is saved as `pending.json`; state remembers only its id and file name. `_show_estimates` fills `preset_choices` (one `PresetView` per preset: Free, Budget, Full, each with its own cost sentence from `estimate_index`) and `pending_detail` (the cost of the options chosen now, e.g. "12 sections, 1 image to describe. About 13 Claude calls on your key (roughly X input and Y output tokens)."). The page shows the three presets as clickable cards, an **Advanced options** toggle, that sentence, and **Index it** / **Cancel**. For a re-upload, `replace_note` adds "Already in your library (indexed with Budget · OpenAI gpt-6-luna). Indexing it again replaces that version.", read from the saved index's `options` and `indexed_with` (the provider and models that built it; never the key).
+
+**Replacing safely.** A re-upload shares its folder with the version already in the library, and nothing is overwritten until the new run succeeds: `store.save_index` writes the new index only at the end (the images are the same, since the file is the same). Cancelling, or a failed run, goes through `_clear_pending(delete_files=True)`, which removes a document's folder **only if no index was ever saved there**: a brand-new upload's leftovers go, an existing document stays exactly as it was. This rule needs no extra state, so it also holds for an upload restored after a server restart.
 
 **Indexing options.** The options live in state as plain values (`opt_split`, `opt_max_leaf`, `opt_small`, `opt_min_leaf`, `opt_summaries`, `opt_summary_length`, `opt_images`: strings and booleans, never an `IndexOptions` object, for the proxy reason above); `_options()` turns them into an `IndexOptions`. `preset` is the matching preset name, or `"custom"` once the advanced panel makes them match none.
 - `set_preset(name)` copies the preset's LLM settings (summaries, length, images) into those fields and refreshes the estimates. The tree is not rebuilt: presets do not change it.

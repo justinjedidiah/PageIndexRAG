@@ -73,3 +73,12 @@ def test_committed_sample_indexes_still_load():
     assert paths
     for path in paths:
         DocumentIndex.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+def test_doc_id_comes_from_the_name_and_content(tmp_path):
+    from pageindex_rag.indexing.pipeline import doc_id_for, make_doc_id
+
+    path = tmp_path / "Ship Manual.md"
+    path.write_bytes(b"# Ship\n")
+    assert make_doc_id(path) == doc_id_for("Ship Manual", b"# Ship\n")
+    assert doc_id_for("Ship Manual", b"# Ship\n") != doc_id_for("Ship Manual", b"# Boat\n")

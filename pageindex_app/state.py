@@ -26,7 +26,7 @@ from pageindex_rag.indexing import (
 )
 from pageindex_rag.indexing.estimate import count_describable_images
 from pageindex_rag.indexing.options import PRESET_DESCRIPTIONS, PRESET_LABELS, matching_preset, preset_options
-from pageindex_rag.indexing.pipeline import make_doc_id
+from pageindex_rag.indexing.pipeline import doc_id_for
 from pageindex_rag.library import SAMPLE_SCOPE, Library
 from pageindex_rag.providers import PROVIDER_IDS, PROVIDERS, LLMConfig, list_models
 from pageindex_rag.models import DocumentIndex, IndexOptions
@@ -119,6 +119,7 @@ class State(rx.State):
     _pending_file: str = ""
     has_pending: bool = False
     pending_name: str = ""
+    replace_note: str = ""  # set when the pending upload is already in the library: indexing it again replaces it
     pending_detail: str = ""
     rebuilding: bool = False
     # Indexing options, as plain values (see IndexOptions). The preset is "custom" once they match none.
@@ -235,13 +236,19 @@ class State(rx.State):
     def _clear_pending(self, delete_files: bool) -> None:
         if delete_files and self._pending_id:
             token = self._token()
-            sessions.store(token).delete_document(self._pending_id)
+            store = sessions.store(token)
+            # A new upload has image files but no saved index yet: remove its folder. A re-upload of a document
+            # already in the library shares that folder: keep it, so cancelling (or a failed run) leaves the
+            # existing version as it was.
+            if not store.has_index(self._pending_id):
+                store.delete_document(self._pending_id)
             (sessions.uploads_dir(token) / self._pending_file).unlink(missing_ok=True)
             pending_path(token).unlink(missing_ok=True)
         self._pending_id = ""
         self._pending_file = ""
         self.has_pending = False
         self.pending_name = ""
+        self.replace_note = ""
         self.pending_detail = ""
         self.preset_choices = []
         self._estimates = {}
@@ -268,6 +275,7 @@ class State(rx.State):
         self._pending_file = index.source_path
         self.has_pending = True
         self.pending_name = index.title
+        self.replace_note = self._replace_note(index.doc_id)
         if index.options:
             options = index.options
             self.opt_split = options.split_large
@@ -278,6 +286,15 @@ class State(rx.State):
             self.opt_summary_length = options.summary_length
             self.opt_images = options.describe_images
         self._cache_estimates(index)
+
+    def _replace_note(self, doc_id: str) -> str:
+        """If this document is already in the visitor's library: how it was indexed, and that indexing replaces it."""
+        token = self._token()
+        store = sessions.store(token) if token and sessions.get(token) else None
+        if store is None or not store.has_index(doc_id):
+            return ""
+        existing = store.load_index(doc_id)
+        return f"Already in your library (indexed with {_indexed_with_text(existing)}). Indexing it again replaces that version."
 
     def _options(self) -> IndexOptions:
         return IndexOptions(
@@ -452,8 +469,14 @@ class State(rx.State):
             self.upload_error = "PDF indexing is not available yet. Word (.docx) files work."
             return
 
+        # Checked before anything is written, so a refused upload does not start a session (and its clock).
+        doc_id = doc_id_for(Path(name).stem, data)
         library = self._library()
-        if self.own_doc_count >= settings.max_session_docs:
+        if library.is_sample(doc_id):
+            self.upload_error = "That's one of the sample documents, already in the library."
+            return
+        replacing = bool(library.session and library.session.has_index(doc_id))
+        if not replacing and self.own_doc_count >= settings.max_session_docs:
             self.upload_error = f"You can keep up to {settings.max_session_docs} documents in a session. Delete one first."
             return
 
@@ -466,10 +489,6 @@ class State(rx.State):
             directory.mkdir(parents=True, exist_ok=True)
             path = directory / name
             path.write_bytes(data)
-            if library.load(make_doc_id(path)):
-                path.unlink(missing_ok=True)
-                self.upload_error = "That document is already in your library."
-                return
             store = sessions.store(token)
             index = await asyncio.to_thread(build_index, path, store, settings, self._options())
         except Exception:
@@ -484,6 +503,7 @@ class State(rx.State):
         self._pending_file = name
         self.has_pending = True
         self.pending_name = index.title
+        self.replace_note = self._replace_note(index.doc_id)
         self._cache_estimates(index)
         self._refresh()
         # No rx.clear_selected_files here: the drop zone sends the file straight away (on_drop), so it keeps
@@ -613,8 +633,7 @@ class State(rx.State):
         except Exception as exc:
             if not job.cancel.is_set():
                 error = friendly_error(exc, llm.info.label)
-                if not isinstance(exc, (OSError, ValueError)):
-                    log.warning("Indexing failed: %s", type(exc).__name__)
+                log.warning("Indexing failed: %s", type(exc).__name__)  # the type only: the text could hold request details
         finally:
             if _jobs.get(token) is job:
                 del _jobs[token]
@@ -692,6 +711,10 @@ class State(rx.State):
 
     @rx.event
     def ask_example(self, question: str):
+        if not self.key_set:
+            return rx.toast.info("Add your API key first, then try a sample question.")
+        if not self.agent_model:
+            return rx.toast.info("Choose a model for chat (under your API key) first.")
         return State.ask({"question": question})
 
     @rx.event(background=True)
@@ -753,8 +776,7 @@ class State(rx.State):
                     ChatMessage(role="assistant", text="There are no documents to search yet.", found=False, error=True),
                 )
         except Exception as exc:
-            if not isinstance(exc, (OSError, ValueError)):
-                log.warning("Answering failed: %s", type(exc).__name__)
+            log.warning("Answering failed: %s", type(exc).__name__)  # the type only: the text could hold request details
             async with self:
                 self._finish_answer(
                     generation,
@@ -786,6 +808,15 @@ class EmptyLibrary(Exception):
 
 def _estimate_key(options: IndexOptions) -> str:
     return f"{options.summaries}|{options.summary_length}|{options.describe_images}"
+
+
+def _indexed_with_text(index: DocumentIndex) -> str:
+    """How a saved index was made, for a visitor: "Budget · OpenAI gpt-6-luna", "Free"."""
+    preset = matching_preset(index.options) if index.options else None
+    how = PRESET_LABELS[preset] if preset else ("custom options" if index.options else "an earlier version of the app")
+    used = index.indexed_with
+    model = used.index_model or used.vision_model if used else ""
+    return f"{how} · {PROVIDERS[used.provider].label} {model}" if used and model else how
 
 
 def _cost_text(estimate: Estimate) -> str:

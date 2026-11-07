@@ -180,6 +180,12 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
 
         step("page loads with 3 sample documents and chat locked", loads, "01-loaded.png")
 
+        def sample_question_without_key() -> None:
+            page.get_by_role("button", name="Who is the commander").click()
+            expect(page.get_by_text("Add your API key first, then try a sample question.")).to_be_visible(timeout=10000)
+
+        step("a sample question without a key says what is missing", sample_question_without_key)
+
         def tab_icon() -> None:
             hrefs = page.eval_on_selector_all("link[rel='icon']", "links => links.map(l => l.getAttribute('href'))")
             assert "/favicon.svg" in hrefs, f"no SVG tab icon linked: {hrefs}"
@@ -386,6 +392,41 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
             expect(page.get_by_text("one kilogram of fish").first).to_be_visible(timeout=60000)
 
         step("the uploaded document can be searched", ask_mine, "09-mine.png")
+
+        pelican = work / "Pelican Care Guide.docx"  # the same file as before, so the same document
+
+        def reupload_and_cancel() -> None:
+            page.set_input_files("input[type=file]", str(pelican))
+            note = page.locator("#replace-note")
+            expect(note).to_contain_text("Already in your library (indexed with Full · OpenAI openai-fake-small)", timeout=30000)
+            page.get_by_role("button", name="Cancel").click()
+            expect(note).to_have_count(0, timeout=10000)
+            expect(page.get_by_text("Pelican Care Guide", exact=True)).to_have_count(1)  # still in the library
+            page.get_by_role("button", name="Browse").last.click()  # its index and outline survived the cancel
+            expect(page.locator("#source-panel").get_by_text("Pelican Care Guide").first).to_be_visible(timeout=10000)
+
+        step("re-uploading a document offers to replace it; cancel keeps it", reupload_and_cancel, "09b-replace.png")
+        step("the outline closes after the re-upload check", dismiss_dialog)
+
+        def reindex_with_budget() -> None:
+            page.set_input_files("input[type=file]", str(pelican))
+            expect(page.locator("#replace-note")).to_be_visible(timeout=30000)
+            page.locator("[data-preset=budget]").click()
+            page.get_by_role("button", name="Index it").click()
+            expect(page.get_by_text("Indexed Pelican Care Guide").first).to_be_visible(timeout=60000)
+            expect(page.get_by_text("Pelican Care Guide", exact=True)).to_have_count(1)  # replaced, not added
+            page.set_input_files("input[type=file]", str(pelican))
+            expect(page.locator("#replace-note")).to_contain_text("indexed with Budget · OpenAI openai-fake-small", timeout=30000)
+            page.get_by_role("button", name="Cancel").click()
+            expect(page.locator("#replace-note")).to_have_count(0, timeout=10000)
+
+        step("indexing it again replaces the old version", reindex_with_budget)
+
+        def sample_file_is_refused() -> None:
+            page.set_input_files("input[type=file]", str(ROOT / "samples" / "source" / "home-solar-installation-guide.docx"))
+            expect(page.get_by_text("one of the sample documents")).to_be_visible(timeout=20000)
+
+        step("uploading a sample document is refused", sample_file_is_refused)
 
         def key_not_on_disk() -> None:
             hits = [str(f) for f in data.rglob("*") if f.is_file() and KEY.encode() in f.read_bytes()]

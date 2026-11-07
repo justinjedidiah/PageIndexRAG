@@ -348,6 +348,7 @@ def advanced_options() -> rx.Component:
 def pending_view() -> rx.Component:
     return rx.vstack(
         rx.text(State.pending_name, weight="medium", size="2", word_break="break-word"),
+        rx.cond(State.replace_note != "", rx.callout(State.replace_note, icon="refresh-cw", size="1", color_scheme="gray", id="replace-note")),
         rx.vstack(
             rx.foreach(State.preset_choices, preset_option),
             spacing="2",

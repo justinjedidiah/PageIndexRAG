@@ -80,6 +80,14 @@ class IndexOptions(BaseModel):
         return self.summaries == "llm" or self.describe_images
 
 
+class IndexedWith(BaseModel):
+    """Which provider and models wrote a document's summaries and image descriptions. Never the key."""
+
+    provider: str
+    index_model: str = ""  # empty when summaries were free previews
+    vision_model: str = ""  # empty when images were not described
+
+
 class TocEntry(BaseModel):
     """One entry of the source document's own ToC, kept as reference data."""
 
@@ -98,6 +106,7 @@ class DocumentIndex(BaseModel):
     root: Node
     images: list[ImageRecord] = Field(default_factory=list)
     options: IndexOptions | None = None  # what was applied; None for indexes made before options existed
+    indexed_with: IndexedWith | None = None  # None when no model was used (Free) or for older indexes
 
     def node_map(self) -> dict[str, Node]:
         return {node.id: node for node in self.root.walk()}
