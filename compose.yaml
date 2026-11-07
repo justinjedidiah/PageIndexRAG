@@ -1,0 +1,15 @@
+# Run the app locally in Docker:
+#
+#   docker compose up --build        then open http://localhost:8000 (the first start takes a minute or two)
+#   docker compose down              to stop it
+#
+# Never add API keys here: the app only uses the key each visitor enters in the page.
+services:
+  app:
+    build: .
+    image: pageindex-rag
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: "8000"
+    restart: unless-stopped

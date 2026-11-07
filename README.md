@@ -51,11 +51,17 @@ Open http://localhost:3000 and paste an API key in the app. No `.env` is needed 
 ## Run with Docker
 
 ```bash
+docker compose up --build      # stop with: docker compose down
+```
+
+or without Compose:
+
+```bash
 docker build -t pageindex-rag .
 docker run -p 8000:8000 pageindex-rag
 ```
 
-Open http://localhost:8000. The first start takes a minute or two while the pages are built. One container serves both the page and the backend, on the port in `PORT` (default 8000).
+Open http://localhost:8000 (stop `reflex run` first if it is running, since it uses port 8000 too). The first start takes a minute or two while the pages are built. One container serves both the page and the backend, on the port in `PORT` (default 8000).
 
 When it runs on a public address, set `API_URL` to that address (for example `https://pageindex.example.com`), so the page knows where to reach the backend. On Railway this is filled in automatically from the app's public domain. Never set an API key on the server: the app only uses the key each visitor enters. Uploads live inside the container and are deleted after 2 hours, so no volume is needed.
 
