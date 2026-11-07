@@ -4,6 +4,17 @@
   --default-font-family: "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
+/* Radix Themes gives buttons and other controls the plain arrow cursor by design; show the hand instead,
+   so everything clickable looks clickable. Disabled controls keep "not-allowed". The doubled class
+   outranks Radix's own .radix-themes rule whatever order the stylesheets load in. */
+.radix-themes.radix-themes {
+  --cursor-button: pointer;
+  --cursor-checkbox: pointer;
+  --cursor-menu-item: pointer;
+  --cursor-radio: pointer;
+  --cursor-switch: pointer;
+}
+
 html,
 body {
   background: var(--gray-4);

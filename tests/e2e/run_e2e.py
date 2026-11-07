@@ -316,6 +316,23 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
 
         step("a real docx shows a cost estimate per preset before indexing", upload_real, "07-estimate.png")
 
+        def clickables_show_a_hand() -> None:
+            """Every visible, enabled clickable thing shows the pointer cursor, including the advanced options."""
+            page.get_by_role("button", name="Advanced options").click()
+            expect(page.get_by_text("Small sections", exact=True)).to_be_visible(timeout=10000)
+            offenders = page.evaluate("""() => {
+                const selector = 'button, [role=button], [role=radio], [role=switch], [role=combobox], [role=checkbox], .rx-Upload';
+                return [...document.querySelectorAll(selector)]
+                    .filter(el => el.offsetParent !== null && !el.disabled && el.getAttribute('aria-disabled') !== 'true'
+                                  && !el.hasAttribute('data-disabled'))
+                    .filter(el => getComputedStyle(el).cursor !== 'pointer')
+                    .map(el => `${el.tagName.toLowerCase()}[${el.getAttribute('role') || ''}] "${(el.innerText || el.title || '').trim().slice(0, 30)}": ${getComputedStyle(el).cursor}`);
+            }""")
+            page.get_by_role("button", name="Advanced options").click()
+            assert not offenders, "no hand cursor on: " + "; ".join(offenders[:8])
+
+        step("everything clickable shows a hand cursor", clickables_show_a_hand)
+
         def index_it() -> None:
             page.get_by_role("button", name="Index it").click()
             # The button disappears as soon as indexing starts; the toast means it has finished and saved.
