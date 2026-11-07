@@ -10,7 +10,6 @@ installed and the dev extras (playwright). Not collected by pytest: it is slow a
 import contextlib
 import io
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -227,10 +226,17 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
         def session_countdown() -> None:
             # Before the first upload there was no session; now the header counts down to its end, in the browser.
             countdown = page.locator("#session-countdown")
-            expect(countdown).to_have_text(re.compile(r"^1:59:[0-5]\d$"), timeout=1500)  # shown at once, not after a tick
-            first = countdown.inner_text()
-            page.wait_for_timeout(2200)
-            assert countdown.inner_text() < first, f"the countdown did not tick: {first!r} -> {countdown.inner_text()!r}"
+            expect(countdown).to_have_text("1 h 59 min", timeout=1500)  # shown at once, in hours and minutes
+            # Other times left, by moving the end time on the page (the timer updates as soon as it changes).
+            real_end = countdown.get_attribute("data-expires-at")
+            for seconds_left, shown in ((3 * 60 + 5, "3 min"), (3600 + 20, "1 h"), (30, "under a minute"), (-5, "now (refresh the page)")):
+                page.evaluate(
+                    "([s]) => document.getElementById('session-countdown').setAttribute('data-expires-at', String(Date.now() / 1000 + s))",
+                    [seconds_left],
+                )
+                expect(countdown).to_have_text(shown, timeout=2000)
+            page.evaluate("([e]) => document.getElementById('session-countdown').setAttribute('data-expires-at', e)", [real_end])
+            expect(countdown).to_have_text("1 h 59 min", timeout=2000)
 
         step("the header counts down to the end of the session", session_countdown)
 

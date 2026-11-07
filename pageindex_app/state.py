@@ -69,18 +69,23 @@ def pending_path(token: str) -> Path:
     return sessions.session_dir(token) / "pending.json"
 
 
-# Counts down every element with a data-expires-at attribute (seconds since 1970) as h:mm:ss, in the browser,
+# Counts down every element with a data-expires-at attribute (seconds since 1970) in hours and minutes, in the browser,
 # so the timer ticks without any traffic to the server. React leaves the text alone: the element has no children.
 COUNTDOWN_SCRIPT = """
 (function () {
-  function pad(n) { return String(n).padStart(2, '0'); }
+  // "1 h 59 min", "59 min", "under a minute": minutes are enough for a 2-hour limit.
+  function describe(left) {
+    if (left <= 0) { return 'now (refresh the page)'; }
+    if (left < 60) { return 'under a minute'; }
+    var hours = Math.floor(left / 3600), minutes = Math.floor(left % 3600 / 60), parts = [];
+    if (hours) { parts.push(hours + ' h'); }
+    if (minutes || !hours) { parts.push(minutes + ' min'); }
+    return parts.join(' ');
+  }
   function tick() {
     document.querySelectorAll('[data-expires-at]').forEach(function (el) {
       var end = parseFloat(el.getAttribute('data-expires-at')) * 1000;
-      var left = end ? Math.max(0, Math.floor((end - Date.now()) / 1000)) : 0;
-      var text = !end ? '' : left > 0
-        ? Math.floor(left / 3600) + ':' + pad(Math.floor(left % 3600 / 60)) + ':' + pad(left % 60)
-        : 'now (refresh the page)';
+      var text = end ? describe(Math.floor((end - Date.now()) / 1000)) : '';
       // Only write when it changed: writing is itself a change the observer below sees, so writing the same
       // text every time would make the page update itself endlessly.
       if (el.textContent !== text) { el.textContent = text; }
