@@ -74,3 +74,23 @@ def test_session_count_ignores_expired_ones(tmp_path):
     assert manager.count() == 2
     now[0] = 1065  # the first has expired, the second has not
     assert manager.count() == 1
+
+
+def test_a_refused_upload_is_reported_to_the_visitors_page(monkeypatch):
+    told = []
+
+    async def remember(token, message):
+        told.append((token, message))
+
+    monkeypatch.setattr(files, "upload_refused", remember)
+    client = TestClient(limit_upload_size(echo))
+    response = client.post("/_upload", content=iter([b"x"]), headers={"reflex-client-token": "tab-123"})
+    assert response.status_code == 413
+    assert told == [("tab-123", "That file is larger than the 15 MB limit.")]
+
+    told.clear()
+    limited = TestClient(files.rate_limit(echo))
+    headers = {"reflex-client-token": "tab-456", "x-real-ip": "203.0.113.50"}
+    for _ in range(files.settings.uploads_per_ip + 1):
+        limited.post("/_upload", content=b"x", headers=headers)
+    assert told == [("tab-456", "Too many uploads in a short time. Wait a few minutes and try again.")]

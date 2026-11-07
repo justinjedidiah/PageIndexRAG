@@ -5,9 +5,11 @@ an uploaded PDF's pages: GET /api/files/{scope}/{doc_id}/pages/{n}.png (rendered
 Only plain image files inside a document's own folder are ever served.
 """
 
+import logging
 import re
 import time
 from collections import deque
+from collections.abc import Awaitable, Callable
 
 from toc_rag.library import SAMPLE_SCOPE, Library, image_media_type
 from starlette.applications import Starlette
@@ -18,6 +20,8 @@ from starlette.routing import Route
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .runtime import sessions, settings
+
+log = logging.getLogger(__name__)
 
 HEADERS = {"Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff"}
 
@@ -56,6 +60,22 @@ async def serve_page(request: Request) -> Response:
 
 
 UPLOAD_PATH = "/_upload"
+
+# Set by the app (toc_app.py): shows a visitor why their upload was refused here. These refusals happen
+# before the app's upload handler runs, and Reflex's page only logs a failed upload to the browser console,
+# so without this the visitor would see nothing happen. Arguments: the client token, the message.
+upload_refused: Callable[[str, str], Awaitable[None]] | None = None
+
+
+async def _refuse_upload(scope: Scope, receive: Receive, send: Send, status: int, message: str) -> None:
+    token = dict(scope["headers"]).get(b"reflex-client-token", b"").decode("latin-1")
+    if upload_refused is not None and token:
+        try:
+            await upload_refused(token, message)
+        except Exception:
+            log.exception("Could not tell the page an upload was refused")
+    headers = {"Retry-After": "120"} if status == 429 else None
+    await Response(message, status_code=status, headers=headers)(scope, receive, send)
 # The file limit plus room for the multipart wrapping around it.
 MAX_UPLOAD_REQUEST_BYTES = settings.max_upload_bytes + 1024 * 1024
 
@@ -74,7 +94,8 @@ def limit_upload_size(app: ASGIApp) -> ASGIApp:
             return
         length = dict(scope["headers"]).get(b"content-length", b"")
         if not length.isdigit() or int(length) > MAX_UPLOAD_REQUEST_BYTES:
-            await Response("Upload too large.", status_code=413)(scope, receive, send)
+            message = f"That file is larger than the {settings.max_upload_bytes // (1024 * 1024)} MB limit."
+            await _refuse_upload(scope, receive, send, 413, message)
             return
         received = 0
 
@@ -128,8 +149,9 @@ def client_address(scope: Scope) -> str:
 
 def rate_limit(app: ASGIApp) -> ASGIApp:
     """Per-address limits on the two requests that cost the server real work: uploads and page pictures."""
+    upload_limiter = RateLimiter(settings.uploads_per_ip)
     limits = [
-        (lambda path: path.rstrip("/").endswith(UPLOAD_PATH), RateLimiter(settings.uploads_per_ip)),
+        (lambda path: path.rstrip("/").endswith(UPLOAD_PATH), upload_limiter),
         (lambda path: bool(_PAGE_PATH.match(path)), RateLimiter(settings.page_renders_per_ip)),
     ]
 
@@ -137,8 +159,12 @@ def rate_limit(app: ASGIApp) -> ASGIApp:
         if scope["type"] == "http":
             for matches, limiter in limits:
                 if matches(scope["path"]) and not limiter.allow(client_address(scope)):
-                    response = Response("Too many requests. Wait a few minutes.", status_code=429, headers={"Retry-After": "120"})
-                    await response(scope, receive, send)
+                    if limiter is upload_limiter:
+                        message = "Too many uploads in a short time. Wait a few minutes and try again."
+                        await _refuse_upload(scope, receive, send, 429, message)
+                    else:
+                        response = Response("Too many requests. Wait a few minutes.", status_code=429, headers={"Retry-After": "120"})
+                        await response(scope, receive, send)
                     return
         await app(scope, receive, send)
 

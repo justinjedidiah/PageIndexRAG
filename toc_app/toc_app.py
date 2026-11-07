@@ -5,6 +5,7 @@ import logging
 
 import reflex as rx
 
+from . import files
 from .files import api, limit_upload_size, rate_limit, security_headers
 from .home import APP_ROUTE, home
 from .runtime import sessions
@@ -33,6 +34,19 @@ app.add_page(
     description="An AI agent answers questions about your PDF and Word documents by navigating their table of contents, with cited sources.",
 )
 app.add_page(index, route=APP_ROUTE, title="TOC RAG", on_load=State.on_load)
+
+
+async def tell_upload_refused(client_token: str, message: str) -> None:
+    """Show why an upload was refused before it reached State.handle_upload (too big, too many)."""
+    namespace = app.event_namespace
+    if namespace is None or client_token not in namespace.token_to_sid:
+        return  # only a page that is open now: never create state for a token nobody is connected with
+    async with app.modify_state(rx.BaseStateToken(ident=client_token, cls=State)) as state:
+        visitor = state if isinstance(state, State) else await state.get_state(State)
+        visitor.upload_error = message
+
+
+files.upload_refused = tell_upload_refused
 
 
 async def sweep_expired_sessions() -> None:
