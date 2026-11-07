@@ -3,7 +3,7 @@
 Retrieval by navigating a document's table-of-contents tree with an LLM agent, instead of embedding similarity (vector RAG). Inspired by PageIndex (VectifyAI). Not the IBM "STAIR" paper, which is a trained generative retriever and a different approach.
 
 ## Product
-A public portfolio web app. Visitors bring their own Anthropic API key (BYOK), upload documents in the UI, and chat over their whole library. Each answer shows text with citations, a clickable source view, images inline, and the agent's navigation path (streamed live). A visitor's library lives on the server for the length of their session only (no accounts). A pre-indexed sample library is browsable without a key; chatting needs a key. The CLI is a small dev tool, not part of the product.
+A public portfolio web app. Visitors bring their own API key (BYOK) for Anthropic, OpenAI or Google Gemini, and choose the models, upload documents in the UI, and chat over their whole library. Each answer shows text with citations, a clickable source view, images inline, and the agent's navigation path (streamed live). A visitor's library lives on the server for the length of their session only (no accounts). A pre-indexed sample library is browsable without a key; chatting needs a key. The CLI is a small dev tool, not part of the product.
 
 ## Scope (v1)
 - Inputs: PDF and Word (.docx) (plus Markdown), with or without a ToC.
@@ -59,20 +59,23 @@ Library: a root node whose children are documents, each with a one-paragraph sum
 - UI: Reflex (Python). Indexing is its own module and must not import Reflex.
 - Agent: LangGraph.
 - Storage: JSON files per document to start; SQLite once there is a library.
-- LLM: Claude via `langchain-anthropic`, model names kept in config, never hardcoded.
-  - Indexing (summaries, split titles, ToC parsing/generation, table descriptions): `claude-haiku-5-5`
-  - Image descriptions: `claude-haiku-5-5`, upgrade to `claude-sonnet-5-5` if descriptions are weak
-  - Agent (branch choice, judging, final answer): `claude-sonnet-5-5`
+- LLM: Anthropic, OpenAI or Google Gemini through LangChain (`langchain-anthropic`, `langchain-openai`, `langchain-google-genai`); everything provider-specific is in `providers.py`. The rest uses LangChain's common interface: tool calls, structured output, image input.
+  - The visitor picks the provider, then pastes a key. Checking the key = listing the models it can use (free); the two model dropdowns (indexing, chat) are filled from that list, so they never go stale. Defaults are only the first choice when the key has them.
+  - Two roles. Indexing (summaries, split titles, image descriptions; later ToC parsing/generation): a small, cheap model. Agent (branch choice, judging, final answer): a stronger one that supports tool calling.
+  - Defaults: Anthropic `claude-haiku-5-5` / `claude-sonnet-5-5`; OpenAI `gpt-6-luna` / `gpt-6.1-sol`; Gemini `gemini-3.5-flash-lite` / `gemini-3.6-flash` (from the providers' model pages, Nov 2026).
+  - Tight output caps on summaries only for Anthropic: OpenAI and Gemini models may spend output tokens on hidden reasoning first, so they get a generous cap.
+  - Errors and refusals are recognised for all three (LangChain's standard error types, HTTP status, each provider's refusal signal).
   - Use prompt caching for the repeated tree prefix in agent calls.
   - Validate Haiku summary quality on a real document before committing.
 
 ## Staging
 1. Library-level agent (done)
-2. Reflex app: BYOK key entry, upload and background indexing with cost estimate, chat with live path, citations, source panel, images, sample library (Word/Markdown). Built and verified end to end in real Chrome with an offline fake model (`tests/e2e/run_e2e.py`, 27 checks). Not yet tried with a real Anthropic key. Needs Node 22.22 or newer (Reflex 0.10)
+2. Reflex app: BYOK key entry, upload and background indexing with cost estimate, chat with live path, citations, source panel, images, sample library (Word/Markdown). Built and verified end to end in real Chrome with an offline fake model (`tests/e2e/run_e2e.py`, 28 checks). Not yet tried with a real Anthropic key. Needs Node 22.22 or newer (Reflex 0.10)
 3. Tree refinement and indexing options (done): split / merge / fold, presets Free / Budget / Full with live cost estimates, free previews, multi-level agent listings. `samples/index` is rebuilt with it (Full preset, real key).
-4. PDF: bookmarks, then printed ToC, then heading heuristics, then LLM-generated structure; page ranges and page-image source view. LLM-generated ToC (off / only when missing / always) comes with this stage, for Word too.
-5. Session storage, 2-hour expiry sweep, limits, deployment, prompt caching
-6. OCR / scans (later)
+4. Model providers (done): Anthropic, OpenAI and Google Gemini keys, provider picker, model dropdowns from the key's live model list. Verified with unit tests and the offline model; not yet run against real OpenAI or Gemini models.
+5. PDF: bookmarks, then printed ToC, then heading heuristics, then LLM-generated structure; page ranges and page-image source view. LLM-generated ToC (off / only when missing / always) comes with this stage, for Word too.
+6. Session storage, 2-hour expiry sweep, limits, deployment, prompt caching
+7. OCR / scans (later)
 
 ## Future work
 - LLM-assisted splitting: an option where the LLM picks topic boundaries inside an oversized section (and titles the parts) instead of size-based cuts.

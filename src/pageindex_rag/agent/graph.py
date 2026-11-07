@@ -14,13 +14,16 @@ from pydantic import BaseModel, Field
 
 from ..config import Settings, get_settings
 from ..models import DocumentIndex
+from ..providers import LLMConfig
 from .citations import extract_markers, visible_prefix
 from .navigator import LibraryNavigator, Step
 
 log = logging.getLogger(__name__)
 
 EMPTY_REPLY_RETRIES = 2  # extra tries when the model answers with nothing at all
-REFUSED_TEXT = "Claude declined to answer this request. Try rephrasing your question."
+REFUSED_TEXT = "The model declined to answer this request. Try rephrasing your question."
+# How each provider says a reply was blocked: Anthropic's stop_reason, OpenAI's and Gemini's finish_reason.
+_REFUSAL_REASONS = {"refusal", "content_filter", "SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "RECITATION"}
 
 SYSTEM_PROMPT = """You answer questions about a library of documents by navigating each document's table of contents.
 
@@ -264,11 +267,15 @@ def stream_ask(
     settings: Settings | None = None,
     history: list[ChatTurn] | None = None,
     api_key: str | None = None,
+    llm_config: LLMConfig | None = None,
 ) -> Iterator[Step | AnswerResult]:
+    """Answer over a library. `llm_config` is the provider, key and models; without it, settings plus `api_key`."""
     from ..llm import chat_model
+    from ..llm import llm_config as config_from_settings
 
     settings = settings or get_settings()
-    llm = chat_model(settings.agent_model, api_key)
+    config = llm_config or config_from_settings(settings, api_key)
+    llm = chat_model(config.agent_model, config.api_key, provider=config.provider)
     navigator = LibraryNavigator(indexes, listing_depth=settings.agent_listing_depth)
     return stream_agent(navigator, llm, question, settings.agent_max_steps, history)
 
@@ -323,7 +330,10 @@ def _answer_result(navigator: LibraryNavigator, reply: str) -> AnswerResult:
 
 
 def _refused(message: AIMessage) -> bool:
-    return message.response_metadata.get("stop_reason") == "refusal"
+    """True if the provider blocked the reply on safety grounds (a deliberate decision, not a glitch)."""
+    meta = message.response_metadata or {}
+    reasons = {str(meta.get("stop_reason")), str(meta.get("finish_reason"))}
+    return bool(reasons & _REFUSAL_REASONS) or bool((message.additional_kwargs or {}).get("refusal"))
 
 
 def _message_text(message: AIMessage) -> str:

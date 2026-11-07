@@ -11,6 +11,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from ..config import Settings
+from ..providers import LLMConfig
 from ..models import DocumentIndex, FileKind, ImageRecord, IndexOptions, TocEntry
 from ..storage import Store
 from .blocks import IMAGE_REF, Block, Heading
@@ -85,15 +86,18 @@ def enrich_index(
     on_progress: OnProgress | None = None,
     options: IndexOptions | None = None,
     cancel: threading.Event | None = None,
+    llm: LLMConfig | None = None,
 ) -> None:
     """Describe images and summarize every section, in place, as far as the options ask. Raises if an LLM call fails.
 
+    `llm` is the provider, key and models to use; without it they come from settings plus `api_key`.
     Options default to the ones the index was built with. Setting `cancel` (from any thread) stops the
     work: calls already sent finish, no new one starts, and IndexingCancelled is raised.
     """
-    from ..llm import chat_model
+    from ..llm import chat_model, llm_config
     from .summarize import SUMMARY_MAX_TOKENS, check_cancelled, describe_images, summarize_tree
 
+    llm = llm or llm_config(settings, api_key)
     options = options or index.options or preset_options(settings=settings)
     index.options = options
     total = estimate_index(index, store, options).calls
@@ -111,7 +115,7 @@ def enrich_index(
         describe_images(
             index.images,
             store.doc_dir(index.doc_id),
-            chat_model(settings.vision_model, api_key),
+            chat_model(llm.vision_model, llm.api_key, provider=llm.provider),
             settings.index_workers,
             on_step,
             cancel,
@@ -120,7 +124,12 @@ def enrich_index(
     if options.summaries == "llm":
         summarize_tree(
             index.root,
-            chat_model(settings.index_model, api_key, max_tokens=SUMMARY_MAX_TOKENS[options.summary_length]),
+            chat_model(
+                llm.index_model,
+                llm.api_key,
+                max_tokens=llm.output_cap(SUMMARY_MAX_TOKENS[options.summary_length]),
+                provider=llm.provider,
+            ),
             index.images,
             settings.index_workers,
             on_step,

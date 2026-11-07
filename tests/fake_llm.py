@@ -26,6 +26,18 @@ def make_model(model: str) -> BaseChatModel:
     return FakeChat()
 
 
+def list_models(provider: str, api_key: str) -> list[str]:
+    """What the provider would list for a key: its default models plus one more, so a choice can be made."""
+    from langchain_core.exceptions import ModelAuthenticationError
+
+    from pageindex_rag.providers import PROVIDERS
+
+    if OPEN_FAIL_KEY in api_key:
+        raise ModelAuthenticationError("rejected")
+    info = PROVIDERS[provider]
+    return sorted({info.index_model, info.agent_model, f"{provider}-fake-large"})
+
+
 def words(text: str) -> set[str]:
     return set(re.findall(r"[a-z0-9]+", text.lower())) - STOPWORDS
 

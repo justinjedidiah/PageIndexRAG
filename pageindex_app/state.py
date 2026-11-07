@@ -28,7 +28,7 @@ from pageindex_rag.indexing.estimate import count_describable_images
 from pageindex_rag.indexing.options import PRESET_DESCRIPTIONS, PRESET_LABELS, matching_preset, preset_options
 from pageindex_rag.indexing.pipeline import make_doc_id
 from pageindex_rag.library import SAMPLE_SCOPE, Library
-from pageindex_rag.llm import validate_key
+from pageindex_rag.providers import PROVIDER_IDS, PROVIDERS, LLMConfig, default_model, list_models
 from pageindex_rag.models import DocumentIndex, IndexOptions
 from pageindex_rag.outline import node_markdown, outline_rows
 from pageindex_rag.sessions import describe_duration
@@ -85,12 +85,18 @@ def scroll_chat(force: bool = False) -> rx.event.EventSpec:
 
 
 class State(rx.State):
-    # The visitor's Anthropic key. A backend variable: it is never sent to the browser,
+    # The visitor's provider and key. The key is a backend variable: it is never sent to the browser,
     # and nothing here writes it to disk or to a log.
+    provider: str = "anthropic"
     _api_key: str = ""
     key_set: bool = False
     key_error: str = ""
     key_checking: bool = False
+    # The chat models this key can use, listed by the provider when the key was checked, and the
+    # visitor's choice for indexing (summaries and images) and for the chat agent.
+    models: list[str] = []
+    index_model: str = ""
+    agent_model: str = ""
 
     docs: list[DocView] = []
     has_samples: bool = False
@@ -160,10 +166,33 @@ class State(rx.State):
         return sum(1 for doc in self.docs if not doc.sample)
 
     @rx.var
+    def provider_label(self) -> str:
+        return PROVIDERS[self.provider].label
+
+    @rx.var
+    def key_placeholder(self) -> str:
+        return PROVIDERS[self.provider].key_placeholder
+
+    @rx.var
+    def key_url(self) -> str:
+        return PROVIDERS[self.provider].key_url
+
+    @rx.var
     def needs_key_to_index(self) -> bool:
         return self.opt_summaries == "llm" or self.opt_images
 
     # ---- helpers ----
+
+    def _llm(self) -> LLMConfig:
+        """The visitor's provider, key and models, for one indexing run or one answer."""
+        return LLMConfig(self.provider, self._api_key, index_model=self.index_model, agent_model=self.agent_model)
+
+    def _forget_key(self) -> None:
+        self._api_key = ""
+        self.key_set = False
+        self.models = []
+        self.index_model = ""
+        self.agent_model = ""
 
     def _token(self) -> str:
         return self.router.session.client_token
@@ -313,10 +342,9 @@ class State(rx.State):
             sessions.delete(token)
         else:
             with job.lock:  # brief: the job only holds it while it saves
-                job.cancel.set()  # no new Claude call starts; the few already sent finish and are discarded
+                job.cancel.set()  # no new model call starts; the few already sent finish and are discarded
                 sessions.delete(token)
-        self._api_key = ""
-        self.key_set = False
+        self._forget_key()
         self.key_error = ""
         self.messages = []
         self.thinking = False
@@ -335,28 +363,51 @@ class State(rx.State):
     # ---- API key ----
 
     @rx.event
+    def set_provider(self, value: str):
+        if value in PROVIDER_IDS and not self.key_set:
+            self.provider = value
+            self.key_error = ""
+
+    @rx.event
     async def save_key(self, form_data: dict[str, Any]):
         key = str(form_data.get("api_key", "")).strip()
+        info = PROVIDERS[self.provider]
         self.key_error = ""
         if not key:
-            self.key_error = "Paste your Anthropic API key first."
+            self.key_error = f"Paste your {info.label} API key first."
             return
         self.key_checking = True
         yield
         try:
-            await asyncio.to_thread(validate_key, key, settings)
+            # Listing the models is free, so it doubles as the key check.
+            models = await asyncio.to_thread(list_models, self.provider, key)
         except Exception as exc:  # the message shown never contains the exception text
-            self.key_error = friendly_error(exc)
+            self.key_error = friendly_error(exc, info.label)
         else:
-            self._api_key = key
-            self.key_set = True
+            if not models:
+                self.key_error = f"{info.label} accepted the key but lists no chat models for it."
+            else:
+                self._api_key = key
+                self.key_set = True
+                self.models = models
+                self.index_model = default_model(models, info.index_model)
+                self.agent_model = default_model(models, info.agent_model)
         finally:
             self.key_checking = False
 
     @rx.event
+    def set_index_model(self, value: str):
+        if value in self.models:
+            self.index_model = value
+
+    @rx.event
+    def set_agent_model(self, value: str):
+        if value in self.models:
+            self.agent_model = value
+
+    @rx.event
     def clear_key(self):
-        self._api_key = ""
-        self.key_set = False
+        self._forget_key()
 
     # ---- documents ----
 
@@ -493,9 +544,9 @@ class State(rx.State):
                 return
             options = self._options()
             if options.uses_llm and not self.key_set:
-                self.upload_error = "Add your Anthropic API key first, or choose the Free preset (it needs no key)."
+                self.upload_error = "Add your API key first, or choose the Free preset (it needs no key)."
                 return
-            key, token = self._api_key, self._token()
+            llm, token = self._llm(), self._token()
             source = sessions.uploads_dir(token) / self._pending_file
             index = self._load_pending()
             total = estimate_index(index, sessions.store(token), options).calls
@@ -518,7 +569,7 @@ class State(rx.State):
                     raise IndexingCancelled
                 index = build_index(source, store, settings, options)
             if options.uses_llm:
-                enrich_index(index, store, settings, key, on_progress, options, cancel=job.cancel)
+                enrich_index(index, store, settings, None, on_progress, options, cancel=job.cancel, llm=llm)
             with job.lock:
                 if job.cancel.is_set():
                     raise IndexingCancelled
@@ -537,7 +588,7 @@ class State(rx.State):
             index = work.result()  # raises if an LLM call failed
         except Exception as exc:
             if not job.cancel.is_set():
-                error = friendly_error(exc)
+                error = friendly_error(exc, llm.info.label)
                 if not isinstance(exc, (OSError, ValueError)):
                     log.warning("Indexing failed: %s", type(exc).__name__)
         finally:
@@ -627,7 +678,7 @@ class State(rx.State):
         async with self:
             if self.thinking or not self.key_set:
                 return
-            key, token = self._api_key, self._token()
+            llm, token = self._llm(), self._token()
             chat_settings = dataclasses.replace(settings, agent_listing_depth=int(self.listing_depth))
             history = [
                 ChatTurn(role=m.role, content=m.text)
@@ -647,7 +698,7 @@ class State(rx.State):
             indexes = library.indexes()
             if not indexes:
                 raise EmptyLibrary
-            events = stream_ask(indexes, question, chat_settings, history, api_key=key)
+            events = stream_ask(indexes, question, chat_settings, history, llm_config=llm)
             last_draft = 0.0
             while (event := await asyncio.to_thread(next, events, None)) is not None:
                 if isinstance(event, Step):
@@ -683,7 +734,7 @@ class State(rx.State):
             async with self:
                 self._finish_answer(
                     generation,
-                    ChatMessage(role="assistant", steps=list(steps), text=friendly_error(exc), found=False, error=True),
+                    ChatMessage(role="assistant", steps=list(steps), text=friendly_error(exc, llm.info.label), found=False, error=True),
                 )
         finally:
             async with self:
@@ -715,9 +766,9 @@ def _estimate_key(options: IndexOptions) -> str:
 
 def _cost_text(estimate: Estimate) -> str:
     if not estimate.calls:
-        return "No Claude calls: free, and no API key needed."
+        return "No model calls: free, and no API key needed."
     return (
-        f"About {estimate.calls} Claude calls on your key (roughly {estimate.input_tokens:,} input and "
+        f"About {estimate.calls} model calls on your key (roughly {estimate.input_tokens:,} input and "
         f"{estimate.output_tokens:,} output tokens)."
     )
 

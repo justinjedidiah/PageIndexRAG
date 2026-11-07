@@ -205,7 +205,7 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
             # The default (Full) needs a key, so indexing is blocked until Free is chosen.
             expect(page.get_by_role("button", name="Index it")).to_be_disabled()
             page.locator("[data-preset=free]").click()
-            expect(page.locator("#pending-detail")).to_contain_text("No Claude calls", timeout=10000)
+            expect(page.locator("#pending-detail")).to_contain_text("No model calls", timeout=10000)
             expect(page.get_by_role("button", name="Index it")).to_be_enabled()
             page.get_by_role("button", name="Index it").click()
             expect(page.get_by_role("button", name="Index it")).to_have_count(0, timeout=60000)
@@ -221,13 +221,40 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
         step("its outline shows parts titled by their first sentence", browse_free, "02c-free-outline.png")
         step("the outline closes", dismiss_dialog)
 
+        def pick(trigger, option: str) -> None:
+            """Choose from a Radix dropdown. It ignores a click that lands just after it opens (so the opening
+            click cannot select by accident), so wait until the list has settled before choosing."""
+            trigger.click()
+            page.get_by_role("option", name=option).wait_for(state="visible", timeout=10000)
+            page.wait_for_timeout(400)
+            page.get_by_role("option", name=option).click()
+
         def enter_key() -> None:
-            page.get_by_placeholder("sk-ant-...").fill(KEY)
+            # Choose OpenAI: the key box and the "get a key" link follow the provider.
+            pick(page.get_by_role("combobox", name="Provider"), "OpenAI")
+            expect(page.get_by_placeholder("sk-...", exact=True)).to_be_visible(timeout=10000)
+            expect(page.get_by_role("link", name="Get a key from OpenAI")).to_have_attribute("href", "https://platform.openai.com/api-keys")
+            # A rejected key gives a clear message that names the provider.
+            page.locator("input[name=api_key]").fill("sk-bad-key-123")
             page.get_by_role("button", name="Use", exact=True).click()
-            expect(page.get_by_text("Key set")).to_be_visible(timeout=20000)
+            expect(page.get_by_text("OpenAI rejected that API key")).to_be_visible(timeout=20000)
+            page.locator("input[name=api_key]").fill(KEY)
+            page.get_by_role("button", name="Use", exact=True).click()
+            expect(page.get_by_text("OpenAI key set")).to_be_visible(timeout=20000)
             expect(page.get_by_placeholder("Ask a question about the documents")).to_be_enabled()
 
-        step("a key is accepted and unlocks chat", enter_key, "03-key.png")
+        step("an OpenAI key is checked, accepted and unlocks chat", enter_key, "03-key.png")
+
+        def choose_models() -> None:
+            # The dropdowns list what the provider says this key can use, with the defaults chosen first.
+            pickers = page.locator(".rt-SelectTrigger").filter(has_text="gpt-")
+            expect(pickers).to_have_count(2, timeout=10000)
+            expect(pickers.nth(0)).to_contain_text("gpt-6-luna")
+            expect(pickers.nth(1)).to_contain_text("gpt-6.1-sol")
+            pick(pickers.nth(1), "openai-fake-large")
+            expect(page.locator(".rt-SelectTrigger").filter(has_text="openai-fake-large")).to_have_count(1, timeout=10000)
+
+        step("models are listed for the key and can be changed", choose_models, "03b-models.png")
 
         def key_not_in_page() -> None:
             assert KEY not in page.content(), "key present in the page HTML"
@@ -308,7 +335,7 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
             expect(page.locator("[data-preset=full]")).to_be_visible(timeout=30000)
             page.locator("[data-preset=budget]").click()
             detail = page.locator("#pending-detail")
-            expect(detail).to_contain_text("Claude calls on your key", timeout=10000)
+            expect(detail).to_contain_text("model calls on your key", timeout=10000)
             budget = detail.inner_text()
             page.locator("[data-preset=full]").click()
             expect(detail).not_to_have_text(budget, timeout=10000)  # Full adds image descriptions and longer summaries
@@ -376,7 +403,7 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
             page.wait_for_timeout(1500)  # a few summaries done, most still to go
             page.get_by_role("button", name="End session and delete my data").click()
             expect(page.get_by_text("Indexing was stopped").first).to_be_visible(timeout=15000)
-            expect(page.get_by_placeholder("sk-ant-...")).to_be_visible(timeout=10000)
+            expect(page.locator("input[name=api_key]")).to_be_visible(timeout=10000)
             expect(page.get_by_text("Indexing with your key...")).to_have_count(0)
             # Give the job time to wind down; it must not save or recreate the deleted folder.
             page.wait_for_timeout(6000)

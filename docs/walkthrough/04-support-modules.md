@@ -1,6 +1,6 @@
 # 04. Supporting modules: settings, keys, sessions, uploads, library
 
-Files covered: `config.py`, `llm.py`, `errors.py`, `sessions.py`, `uploads.py`, `library.py`, `outline.py`, `cli.py` (all in `src/pageindex_rag/`).
+Files covered: `config.py`, `providers.py`, `llm.py`, `errors.py`, `sessions.py`, `uploads.py`, `library.py`, `outline.py`, `cli.py` (all in `src/pageindex_rag/`).
 
 These are the small modules that the indexing code (file 02), the agent (file 03) and the web app (file 05) all lean on. Several of them exist mainly for **security and privacy**, which matters because the finished app is public and handles other people's API keys and documents.
 
@@ -39,7 +39,8 @@ A **frozen dataclass**: a bundle of settings that cannot be changed after creati
 def get_settings() -> Settings:
     return Settings(
         data_dir=Path(os.getenv("PAGEINDEX_DATA_DIR", "data")),
-        index_model=os.getenv("PAGEINDEX_INDEX_MODEL", "claude-haiku-5-5"),
+        provider=provider,                       # PAGEINDEX_PROVIDER, default "anthropic"
+        index_model=os.getenv("PAGEINDEX_INDEX_MODEL", defaults.index_model),   # defaults follow the provider
         ...
 ```
 
@@ -47,17 +48,18 @@ def get_settings() -> Settings:
 
 | Environment variable | Default | Meaning |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | none | Only for the command line and sample building. **Never** set on a public server. |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GOOGLE_API_KEY` | none | Only for the command line and sample building. **Never** set on a public server. |
+| `PAGEINDEX_PROVIDER` | `anthropic` | Provider for the CLI: `anthropic`, `openai` or `google`. The web app uses each visitor's choice. |
 | `PAGEINDEX_DATA_DIR` | `data` | Where files are stored. Relative to the folder you run from. |
-| `PAGEINDEX_INDEX_MODEL` | `claude-haiku-5-5` | Writes section summaries |
-| `PAGEINDEX_VISION_MODEL` | `claude-haiku-5-5` | Describes images |
-| `PAGEINDEX_AGENT_MODEL` | `claude-sonnet-5-5` | Navigates and answers |
+| `PAGEINDEX_INDEX_MODEL` | the provider's (e.g. `claude-haiku-5-5`) | Writes section summaries |
+| `PAGEINDEX_VISION_MODEL` | the index model | Describes images |
+| `PAGEINDEX_AGENT_MODEL` | the provider's (e.g. `claude-sonnet-5-5`) | Navigates and answers |
 | `PAGEINDEX_MAX_LEAF_TOKENS` | 2000 | Sections bigger than this get split |
 | `PAGEINDEX_AGENT_MAX_STEPS` | 15 | Agent step budget |
 | `PAGEINDEX_SESSION_TTL_SECONDS` | 7200 | Session lifetime (2 hours) |
 | `PAGEINDEX_MAX_UPLOAD_MB` | 15 | Upload size cap |
 | `PAGEINDEX_MAX_SESSION_DOCS` | 5 | Documents per visitor |
-| `PAGEINDEX_INDEX_WORKERS` | 6 | Parallel Claude calls while indexing |
+| `PAGEINDEX_INDEX_WORKERS` | 6 | Parallel model calls while indexing |
 | `PAGEINDEX_SAMPLES_DIR` | `samples/index` | The shared sample library |
 | `PAGEINDEX_LLM_FACTORY` | none | Test hook: swap in the fake model (file 06) |
 
@@ -65,44 +67,70 @@ The web app calls `get_settings()` once at start-up (`pageindex_app/runtime.py`)
 
 ---
 
-## `llm.py`: creating the Claude connection
+## `providers.py`: Anthropic, OpenAI and Google Gemini
+
+Everything that differs between model providers lives in this one file; the rest of the code talks to LangChain's common interface (tool calls, structured output, image input), which all three support.
 
 ```python
-def chat_model(model: str, api_key: str | None = None, max_tokens: int = 2048) -> BaseChatModel:
-    factory = os.getenv("PAGEINDEX_LLM_FACTORY")
-    if factory:
-        module_name, _, function = factory.partition(":")
-        return getattr(importlib.import_module(module_name), function)(model)
-    kwargs = {"api_key": api_key} if api_key else {}
-    return ChatAnthropic(model=model, max_tokens=max_tokens, **kwargs)
+PROVIDERS = {
+    "anthropic": ProviderInfo("anthropic", "Anthropic", "sk-ant-...", <key page>, "ANTHROPIC_API_KEY",
+                              index_model="claude-haiku-5-5", agent_model="claude-sonnet-5-5", small_caps=True),
+    "openai": ProviderInfo(..., index_model="gpt-6-luna", agent_model="gpt-6.1-sol"),
+    "google": ProviderInfo(..., index_model="gemini-3.5-flash-lite", agent_model="gemini-3.6-flash"),
+}
 ```
 
-This single function is **the only place a model is created**; everything else asks it. Two paths:
-
-1. **The test hook.** If `PAGEINDEX_LLM_FACTORY` is set to something like `tests.fake_llm:make_model`, it imports that module and calls that function instead (`importlib.import_module` loads a module from a name stored in a string; `getattr` fetches the function by name). This is how the offline fake model is swapped in for browser testing. In normal use the variable is not set.
-2. **The real thing.** `ChatAnthropic` is LangChain's wrapper for Claude. The visitor's `api_key` is passed in only if given: `{"api_key": api_key} if api_key else {}` followed by `**kwargs` ("unpack this dictionary as keyword arguments") means "pass `api_key=` only when I have one". If none is passed, the library silently falls back to the `ANTHROPIC_API_KEY` environment variable, which is why the file's header warns never to set that on a public server: the app must only ever spend *the visitor's* key. (The web layer always passes the visitor's key, and refuses to chat without one.)
+A `ProviderInfo` per provider: its name, what its keys look like (the key box's hint), where to get a key, the environment variable LangChain falls back to, and the **default** models for the two roles: a small, cheap one for indexing (summaries, image descriptions) and a stronger one for the chat agent. These defaults are only a first choice (see `list_models`).
 
 ```python
-def validate_key(api_key: str, settings: Settings) -> None:
-    chat_model(settings.index_model, api_key=api_key, max_tokens=1).invoke("Hi")
+@dataclass(frozen=True)
+class LLMConfig:
+    provider: Provider = "anthropic"
+    api_key: str | None = field(default=None, repr=False)
+    index_model: str = ""      # empty -> the provider's default
+    vision_model: str = ""     # empty -> the index model
+    agent_model: str = ""      # empty -> the provider's default
 ```
-Checking a key means *using* it once: a request that asks for at most **1 token** of output ("Hi" in, one token back), costing a tiny fraction of a cent. If the key is bad, Anthropic's library raises an error, which the caller catches. There is no cheaper honest way to learn whether a key works.
+
+One visitor's (or the CLI's) choice, passed to indexing (`enrich_index(..., llm=...)`) and chat (`stream_ask(..., llm_config=...)`). `repr=False` on the key means printing a config, or logging one by mistake, never shows the key.
+
+**`chat_model(config, model, max_tokens)`** is the only place a model is created: `ChatAnthropic`, `ChatOpenAI` or `ChatGoogleGenerativeAI`. The test hook `PAGEINDEX_LLM_FACTORY` (for example `tests.fake_llm:make_model`) swaps in the offline model instead. The key is passed only when given; with none, LangChain falls back to the provider's environment variable, which is why it must never be set on a public server: the app must only ever spend *the visitor's* key.
+
+**Output caps.** Summaries are capped at 256 or 512 output tokens on Anthropic. OpenAI and Gemini models can spend output tokens on hidden reasoning before answering, so a tight cap could leave no room for the answer; they get a generous cap (`LLMConfig.output_cap`). The prompt sets the summary length either way.
+
+**`list_models(provider, api_key)`** asks the provider which models this key can use (`models.list` in each SDK) and keeps the chat models (drops speech, image, embedding and similar ones by name). Two reasons: model lineups change every few months, so the UI's dropdowns are filled from this live list instead of a list in the code; and listing models is **free**, so it doubles as the key check: a bad key raises the provider's own error. `default_model(models, preferred)` picks the provider's default if the key has it, else the first listed model.
+
+---
+
+## `llm.py`: the thin wrapper
+
+```python
+def chat_model(model, api_key=None, max_tokens=2048, provider="anthropic") -> BaseChatModel:
+    return providers.chat_model(LLMConfig(provider, api_key), model, max_tokens)
+
+def llm_config(settings, api_key=None) -> LLMConfig:
+    return LLMConfig(settings.provider, api_key, index_model=settings.index_model, ...)
+```
+
+Indexing and the agent call `llm.chat_model(...)` (tests replace this one function with a fake), and `llm_config` builds an `LLMConfig` from settings for the CLI and for callers that pass no config.
 
 ---
 
 ## `errors.py`: turning API errors into safe messages
 
 ```python
-def friendly_error(exc: Exception) -> str:
-    if isinstance(exc, anthropic.AuthenticationError):
-        return "Anthropic rejected that API key. Check it and try again."
+def friendly_error(exc: Exception, provider: str | None = None) -> str:
+    name = provider or _provider_name(exc)          # "OpenAI", from where the error came from
+    status = _status(exc)                           # status_code (Anthropic, OpenAI) or code (Google)
+    if _any(exc, lc.ModelAuthenticationError) or status == 401:
+        return f"{name} rejected that API key. Check it and try again."
     ...
     return "Something went wrong. Try again."
 ```
 
-A chain of `isinstance` checks: *what kind of error is this?* -> a fixed, human sentence for each (bad key, permission, rate limit/no credit, connection problem, other HTTP error with its status code, anything else).
+It works for all three providers by checking, in order: LangChain's **standard error types** (`ModelAuthenticationError`, `ModelRateLimitError`, ...: the Gemini package raises these), then an **HTTP status** on the error (the Anthropic and OpenAI SDKs' own errors carry `status_code`, Google's carry `code`), then anything that looks like a **connection** or timeout failure. It looks through the errors an exception was raised from (`__cause__`), since LangChain often wraps the SDK's error. Each case maps to a fixed sentence: bad key (401), not allowed (403), model not available for this key (404), rate limit or no credit (429), cannot reach the provider, other status, anything else.
 
-The docstring states the reason: **never include the raw exception text.** Raw errors can contain details of the request. Showing only our own fixed sentences means a visitor's key can never leak into the page or logs through an error message. (There is a unit test that puts a fake key into the raw error and checks it never appears in the output.)
+The docstring states the reason: **never include the raw exception text.** Raw errors can contain details of the request. Showing only our own fixed sentences means a visitor's key can never leak into the page or logs through an error message. (Unit tests put a fake key into each provider's raw errors and check it never appears in the output.)
 
 ---
 
@@ -389,4 +417,4 @@ The `index` branch calls `index_document`; `list` prints the library; `tree` pri
 
 Imports like `from .indexing import index_document` sit **inside** the `if` branches so a quick `pageindex list` does not load the heavy AI libraries.
 
-The CLI uses the key in your `.env` (`ANTHROPIC_API_KEY`), unlike the web app, which only uses the visitor's.
+The CLI uses the provider in `PAGEINDEX_PROVIDER` and its key in your `.env` (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `GOOGLE_API_KEY`), unlike the web app, which only uses the visitor's.

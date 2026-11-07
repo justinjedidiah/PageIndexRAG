@@ -18,7 +18,7 @@ These explain the code **as it is now**, including the parts your other session 
 
 ## The idea in one paragraph
 
-Instead of chopping documents into chunks and searching by similarity (vector RAG), the project turns each document into a **tree of sections** (like a table of contents), has Claude write a short **summary of every section** once, and then answers questions with an **agent**: Claude is given a few tools (open a document, list a section's subsections, read a section, go back up) and walks the tree itself, reading summaries to choose where to go, then reading the section that should hold the answer. You can see every step it took.
+Instead of chopping documents into chunks and searching by similarity (vector RAG), the project turns each document into a **tree of sections** (like a table of contents), has an AI model write a short **summary of every section** once, and then answers questions with an **agent**: Claude is given a few tools (open a document, list a section's subsections, read a section, go back up) and walks the tree itself, reading summaries to choose where to go, then reading the section that should hold the answer. You can see every step it took.
 
 ---
 
@@ -45,7 +45,8 @@ PageIndexRAG/
 │   │   ├─ navigator.py         what the agent's tools actually do                        (03)
 │   │   └─ graph.py             the agent loop (LangGraph)                                (03)
 │   ├─ config.py                all settings, from environment variables                  (04)
-│   ├─ llm.py                   the one place a Claude connection is created              (04)
+│   ├─ providers.py             Anthropic / OpenAI / Gemini: models, defaults, model lists (04)
+│   ├─ llm.py                   thin wrapper: chat_model() and the settings' LLMConfig    (04)
 │   ├─ errors.py                safe error messages                                       (04)
 │   ├─ sessions.py              per-visitor folders that expire                           (04)
 │   ├─ uploads.py               checking uploaded files                                   (04)
@@ -129,12 +130,12 @@ Visitor clicks a citation
 | **Leaf** | A node with no subsections. |
 | **Summary** | 2-4 sentences Claude writes about a node at index time. The agent navigates by these. |
 | **Token** | The unit AI models read and bill by; roughly 3/4 of an English word. |
-| **LLM** | Large language model: Claude. |
+| **LLM** | Large language model. The visitor chooses Anthropic (Claude), OpenAI or Google Gemini, and the models. Where these pages say "Claude", read "the chosen model": Claude is the default provider. |
 | **Haiku / Sonnet** | Two Claude sizes. Haiku (cheap, fast) does indexing; Sonnet (stronger) runs the agent. |
 | **Tool calling** | The model asks your code to run a function (e.g. `read_node`) and receives the result. |
 | **Agent** | A loop of "model chooses a tool, code runs it, repeat until done". |
 | **Structured output** | Asking the model to reply with data matching a defined shape instead of prose. |
-| **BYOK** | "Bring your own key": the visitor supplies their own Anthropic API key and pays for their own usage. |
+| **BYOK** | "Bring your own key": the visitor supplies their own Anthropic, OpenAI or Gemini API key and pays for their own usage. |
 | **Session** | A visitor's private, temporary workspace (a folder, deleted after 2 hours or on "End session"). |
 | **Reflex** | The Python framework used to build the website. |
 | **State** | Reflex's server-side object holding what each visitor's page currently shows. |

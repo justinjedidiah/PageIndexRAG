@@ -154,7 +154,7 @@ def test_budget_options_skip_images_and_ask_for_short_summaries(tmp_path, settin
 
     assert llm.image_calls == 0
     assert schemas == [_ShortNodeSummary]
-    assert caps == [{"max_tokens": 256}]
+    assert caps == [{"max_tokens": 256, "provider": "anthropic"}]
     assert "short sentences" in next(iter(llm.prompts.values()))
     assert index.options.summary_length == "short"
 

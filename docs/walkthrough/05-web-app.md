@@ -203,24 +203,28 @@ Reflex turns every public method of a state class into an event handler; a leadi
 If an "Index it" is running, `end_session` also **stops it**, so the visitor's key is not spent after they asked to leave. Each running job is an `IndexingJob` in the module-level `_jobs` dict (keyed by session token; it lives outside the state because Reflex state cannot hold a `threading.Event` or a lock). `end_session` sets the job's `cancel` event and deletes the folder while holding the job's `lock`. `enrich_index` checks `cancel` before every Claude call, so the calls already sent (at most `index_workers`) finish and nothing new starts. The job saves only while holding the same lock, after checking `cancel`, so it can never save into, and so recreate, the deleted folder. A cancelled job then leaves the page state alone: the visitor may already have started a new upload in the same tab. The toast says "Indexing was stopped." 
 
 **`save_key(form_data)`**:
+The key card has a **provider** dropdown (Anthropic, OpenAI, Google Gemini; `set_provider`, only while no key is set) above the key box. The dropdown sits outside the key's form on purpose: the form clears itself after each submit, so the key does not linger in the box, and a dropdown inside it would snap back to its first value, so an OpenAI key would be checked against Anthropic. The key box's hint and the "get a key" link follow the chosen provider (`key_placeholder`, `key_url`).
+
 ```python
 key = str(form_data.get("api_key", "")).strip()
 ...
 self.key_checking = True
 yield
 try:
-    await asyncio.to_thread(validate_key, key, settings)
+    models = await asyncio.to_thread(list_models, self.provider, key)   # free: doubles as the key check
 except Exception as exc:
-    self.key_error = friendly_error(exc)
+    self.key_error = friendly_error(exc, info.label)
 else:
-    self._api_key = key
-    self.key_set = True
+    self._api_key, self.key_set = key, True
+    self.models = models
+    self.index_model = default_model(models, info.index_model)
+    self.agent_model = default_model(models, info.agent_model)
 finally:
     self.key_checking = False
 ```
-`form_data` is the submitted form as a dictionary (the input was named `api_key`). The bare `yield` **pushes the current changes to the page immediately** (so the "Use" button shows its spinner) before the slow part. `validate_key` is a network call, so it runs on a helper thread (`asyncio.to_thread`) to avoid freezing the server. Outcomes: an error becomes a friendly message (never the raw text); success stores the key in the backend variable and sets `key_set`. `try/except/else/finally`: `else` runs only if nothing was raised; `finally` always runs.
+`form_data` is the submitted form as a dictionary (the input was named `api_key`). The bare `yield` **pushes the current changes to the page immediately** (so the "Use" button shows its spinner) before the slow part. Listing the models is a network call, so it runs on a helper thread (`asyncio.to_thread`) to avoid freezing the server. Outcomes: an error becomes a friendly message naming the provider (never the raw text); success stores the key in the backend variable, sets `key_set`, keeps the list of models this key can use, and picks the provider's default models when the key has them. The card then shows "OpenAI key set" and two dropdowns filled from `models`: **Model for indexing** and **Model for chat** (`set_index_model`, `set_agent_model`). `_llm()` bundles provider, key and models into an `LLMConfig` for each indexing run and each answer. `try/except/else/finally`: `else` runs only if nothing was raised; `finally` always runs.
 
-**`clear_key`**: forgets the key.
+**`clear_key`**: forgets the key and its model list (`_forget_key`).
 
 **`handle_upload(files)`**: the longest handler. In order:
 1. Refuse if something is already in progress, or if no file was chosen. No key is needed to upload: reading the file and building the tree are free, and the Free preset never uses a key.
@@ -238,7 +242,7 @@ finally:
 **Indexing options.** The options live in state as plain values (`opt_split`, `opt_max_leaf`, `opt_small`, `opt_min_leaf`, `opt_summaries`, `opt_summary_length`, `opt_images`: strings and booleans, never an `IndexOptions` object, for the proxy reason above); `_options()` turns them into an `IndexOptions`. `preset` is the matching preset name, or `"custom"` once the advanced panel makes them match none.
 - `set_preset(name)` copies the preset's LLM settings (summaries, length, images) into those fields and refreshes the estimates. The tree is not rebuilt: presets do not change it.
 - Each advanced control has its own handler (`set_opt_split`, `set_opt_small`, ...). A **tree** option (split, max size, small sections, tiny size) rebuilds the pending tree with `build_index` on a helper thread (free, no LLM; `rebuilding` shows a spinner on Index it), then refreshes the estimates. A summary or image option only refreshes the estimates.
-- `needs_key_to_index` is true when the options use Claude; then **Index it** is disabled until a key is set, with a hint to add one or pick Free.
+- `needs_key_to_index` is true when the options use the model; then **Index it** is disabled until a key is set, with a hint to add one or pick Free.
 
 **`cancel_pending`**: forget and delete the pending document.
 
@@ -249,7 +253,7 @@ async with self:
         return
     options = self._options()
     if options.uses_llm and not self.key_set:
-        self.upload_error = "Add your Anthropic API key first, or choose the Free preset (it needs no key)."
+        self.upload_error = "Add your API key first, or choose the Free preset (it needs no key)."
         return
     key, token = self._api_key, self._token()
     source = sessions.uploads_dir(token) / self._pending_file

@@ -2,6 +2,8 @@
 
 import reflex as rx
 
+from pageindex_rag.providers import PROVIDERS
+
 from .runtime import settings
 from .state import MAX_LEAF_CHOICES, MIN_LEAF_CHOICES, UPLOAD_ID, State
 from .viewmodels import ChatMessage, CitationView, DocView, ImageView, OutlineRowView, PresetView, StepView
@@ -43,38 +45,81 @@ def prose(text: rx.Var[str]) -> rx.Component:
 # ---- sidebar ----
 
 
+def model_select(label: str, value: rx.Var, on_change, hint: str) -> rx.Component:
+    return rx.vstack(
+        rx.text(label, size="1", weight="medium"),
+        rx.select(State.models, value=value, on_change=on_change, size="1", width="100%"),
+        rx.text(hint, **MUTED),
+        spacing="1",
+        width="100%",
+    )
+
+
 def key_card() -> rx.Component:
     return rx.card(
         rx.vstack(
-            rx.text("1. Your Anthropic API key", size="2", weight="bold"),
+            rx.text("1. Your API key", size="2", weight="bold"),
             rx.cond(
                 State.key_set,
-                rx.hstack(
-                    rx.badge("Key set", color_scheme="green"),
-                    rx.button("Remove", variant="ghost", size="1", on_click=State.clear_key),
-                    align="center",
-                ),
-                rx.form(
+                rx.vstack(
                     rx.hstack(
-                        rx.input(
-                            name="api_key",
-                            type="password",
-                            placeholder="sk-ant-...",
-                            auto_complete="off",
+                        rx.badge(f"{State.provider_label} key set", color_scheme="green"),
+                        rx.button("Remove", variant="ghost", size="1", on_click=State.clear_key),
+                        align="center",
+                    ),
+                    model_select(
+                        "Model for indexing", State.index_model, State.set_index_model,
+                        "Writes summaries and describes images. A small, cheap model is enough.",
+                    ),
+                    model_select(
+                        "Model for chat", State.agent_model, State.set_agent_model,
+                        "Navigates the documents and answers. Must support tool calling.",
+                    ),
+                    spacing="3",
+                    width="100%",
+                ),
+                rx.vstack(
+                    # Outside the form on purpose: the form clears itself after each submit (so the key does
+                    # not linger in the box), and a select inside it would snap back to its first value.
+                    rx.select.root(
+                        rx.select.trigger(width="100%", custom_attrs={"aria-label": "Provider"}),
+                        rx.select.content(
+                            *[rx.select.item(info.label, value=pid) for pid, info in PROVIDERS.items()]
+                        ),
+                        value=State.provider,
+                        on_change=State.set_provider,
+                        size="2",
+                    ),
+                    rx.form(
+                        rx.hstack(
+                            rx.input(
+                                name="api_key",
+                                type="password",
+                                placeholder=State.key_placeholder,
+                                auto_complete="off",
+                                width="100%",
+                            ),
+                            rx.button("Use", type="submit", loading=State.key_checking, **PRIMARY),
                             width="100%",
                         ),
-                        rx.button("Use", type="submit", loading=State.key_checking, **PRIMARY),
+                        on_submit=State.save_key,
+                        reset_on_submit=True,
                         width="100%",
                     ),
-                    on_submit=State.save_key,
-                    reset_on_submit=True,
+                    rx.link(
+                        f"Get a key from {State.provider_label}",
+                        href=State.key_url,
+                        is_external=True,
+                        size="1",
+                    ),
+                    spacing="2",
                     width="100%",
                 ),
             ),
             rx.cond(State.key_error != "", rx.text(State.key_error, size="2", color_scheme="red")),
             rx.text(
-                "Needed to chat, and to index with Claude summaries. It stays in this session's server memory only: never "
-                "saved to disk or logged, and sent only to Anthropic.",
+                f"Anthropic, OpenAI or Google Gemini. Needed to chat, and to index with AI summaries. It stays in "
+                f"this session's server memory only: never saved to disk or logged, and sent only to {State.provider_label}.",
                 **MUTED,
             ),
             spacing="2",
@@ -257,7 +302,7 @@ def advanced_options() -> rx.Component:
         option_row(
             "Section summaries",
             choice_select(
-                [("llm", "Claude summaries"), ("preview", "Free previews")], State.opt_summaries, State.set_opt_summaries
+                [("llm", "AI summaries"), ("preview", "Free previews")], State.opt_summaries, State.set_opt_summaries
             ),
         ),
         option_row(
@@ -270,7 +315,7 @@ def advanced_options() -> rx.Component:
             ),
         ),
         option_row(
-            "Describe images with Claude",
+            "Describe images with the model",
             rx.switch(checked=State.opt_images, on_change=State.set_opt_images, size="1"),
         ),
         rx.text(
@@ -307,7 +352,7 @@ def pending_view() -> rx.Component:
         rx.text(State.pending_detail, size="2", id="pending-detail"),
         rx.cond(
             State.needs_key_to_index & ~State.key_set,
-            rx.text("These options use Claude: add your API key above, or pick Free.", size="1", color_scheme="amber"),
+            rx.text("These options use your API key: add it above, or pick Free.", size="1", color_scheme="amber"),
         ),
         rx.hstack(
             rx.button(
