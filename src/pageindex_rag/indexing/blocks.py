@@ -27,7 +27,16 @@ class Image:
     alt: str = ""
 
 
-Block = Heading | Paragraph | Table | Image
+@dataclass
+class TocLine:
+    """One entry of the document's own table of contents. Kept as reference data, never as text."""
+
+    level: int
+    title: str
+    page: str | None = None
+
+
+Block = Heading | Paragraph | Table | Image | TocLine
 
 IMAGE_REF = re.compile(r"\[image:(img-\d+)\]")
 

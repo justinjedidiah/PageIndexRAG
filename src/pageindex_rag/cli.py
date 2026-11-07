@@ -59,7 +59,9 @@ def main(argv: list[str] | None = None) -> None:
         for entry in store.list_documents():
             print(f"{entry.doc_id}  ({entry.kind})  {entry.title}")
     elif args.command == "tree":
-        _print_tree(store.load_index(args.doc_id).root)
+        index = store.load_index(args.doc_id)
+        print(f"structure: {STRUCTURE_NOTES.get(index.structure_source, 'not recorded')}")
+        _print_tree(index.root)
     elif args.command == "ask":
         from .agent import AnswerResult, Step, stream_ask
 
@@ -80,6 +82,12 @@ def main(argv: list[str] | None = None) -> None:
                 print(f"  [{citation.doc_id}:{citation.node_id}] {citation.title} - {citation.location}")
             for image in event.images:
                 print(f"  image: {image.doc_id}:{image.image_id} ({image.description})")
+
+
+STRUCTURE_NOTES = {
+    "headings": "from the document's headings",
+    "none": "no headings found, so the text is split into parts by size",
+}
 
 
 def _index_options(args: argparse.Namespace, settings: Settings) -> IndexOptions:

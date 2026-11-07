@@ -20,7 +20,7 @@ A public portfolio web app. Visitors bring their own API key (BYOK) for Anthropi
 
 ## Indexing pipeline
 1. Extract structure, cheapest first, stop at the first believable result:
-   - Word: heading styles (Heading 1/2/3) give the tree directly, no LLM.
+   - Word: paragraphs with an outline level (what Word's Navigation Pane lists: Heading 1-9 and most custom heading styles) give the tree directly, no LLM. Content controls are read like normal content. A Word-inserted ToC is kept out of the text, its entries stored as `source_toc`; it is not needed for the tree, being generated from the headings. Planned next, only when no headings are found: a typed contents page (entries matched to the body in order, trusted only if most are found), then heading-looking lines (bold, numbered, bigger), then cutting by size. The index records which built the tree (`structure_source`).
    - PDF: embedded bookmarks/outline, then a printed ToC page parsed by an LLM, then font/layout heading heuristics, then LLM-generated structure as a last resort.
 2. The original ToC is only a base. Keep it as data in `source_toc`; the navigable tree is our own refined one.
 3. Refine the tree carefully (`indexing/refine.py`). Each tree level costs the agent one tool call, so the tree should be shallow, and the original ToC changes only where a section breaks a limit. A good ToC comes back unchanged. All of these are free (no LLM) and each can be turned off:

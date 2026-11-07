@@ -1,7 +1,7 @@
 """Build the node tree from a flat list of blocks."""
 
 from ..models import FileKind, Location, Node
-from .blocks import Block, Heading, Image, Paragraph, image_placeholder
+from .blocks import Block, Heading, Image, Paragraph, TocLine, image_placeholder
 
 
 def build_tree(blocks: list[Block], title: str, kind: FileKind) -> tuple[Node, list[tuple[str, Image]]]:
@@ -36,6 +36,8 @@ def build_tree(blocks: list[Block], title: str, kind: FileKind) -> tuple[Node, l
             parts[stack[-1].id].append(image_placeholder(image_id))
         elif isinstance(block, Paragraph):
             parts[stack[-1].id].append(block.text)
+        elif isinstance(block, TocLine):
+            continue  # the document's own table of contents: reference data, not text
         else:
             parts[stack[-1].id].append(block.markdown)
 

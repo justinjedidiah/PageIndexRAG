@@ -180,6 +180,7 @@ class State(rx.State):
 
     browse_open: bool = False
     browse_title: str = ""
+    browse_structure: str = ""  # where the outline came from, in words ("" for older indexes)
     browse_rows: list[OutlineRowView] = []
 
     listing_depth: str = str(settings.agent_listing_depth)  # tree levels one agent listing shows
@@ -721,6 +722,7 @@ class State(rx.State):
         if index is None:
             return rx.toast.error("That document is no longer available.")
         self.browse_title = index.title
+        self.browse_structure = STRUCTURE_NOTES.get(index.structure_source or "", "")
         self.browse_rows = [
             OutlineRowView(row.ref, row.title, row.summary, f"{row.depth * 1.2}em") for row in outline_rows(index)
         ]
@@ -836,6 +838,13 @@ class EmptyLibrary(Exception):
 
 def _estimate_key(options: IndexOptions) -> str:
     return f"{options.summaries}|{options.summary_length}|{options.describe_images}"
+
+
+# Shown above a document's outline, so a flat outline explains itself.
+STRUCTURE_NOTES = {
+    "headings": "Outline from the document's headings.",
+    "none": "No headings found in this document, so its text is split into parts by size.",
+}
 
 
 def _indexed_with_text(index: DocumentIndex) -> str:

@@ -14,7 +14,7 @@ from ..config import Settings
 from ..providers import LLMConfig
 from ..models import DocumentIndex, FileKind, ImageRecord, IndexedWith, IndexOptions, TocEntry
 from ..storage import Store
-from .blocks import IMAGE_REF, Block, Heading
+from .blocks import IMAGE_REF, Block, Heading, TocLine
 from .docx_extract import extract_docx
 from .estimate import estimate_index
 from .markdown_extract import extract_markdown
@@ -49,7 +49,11 @@ def build_index(
     doc_id = make_doc_id(path)
 
     root, raw_images = build_tree(blocks, title=path.stem, kind=kind)
-    source_toc = [TocEntry(title=b.title, level=b.level) for b in blocks if isinstance(b, Heading)] or None
+    headings = [b for b in blocks if isinstance(b, Heading)]
+    # The document's own ToC as reference data: its table of contents if it has one, else its headings.
+    source_toc = [TocEntry(title=b.title, level=b.level, page=b.page) for b in blocks if isinstance(b, TocLine)] or [
+        TocEntry(title=b.title, level=b.level) for b in headings
+    ] or None
     refine_tree(root, options)
     if options.summaries == "preview":
         fill_previews(root, options.preview_sentences)
@@ -69,6 +73,7 @@ def build_index(
         source_path=path.name,
         kind=kind,
         source_toc=source_toc,
+        structure_source="headings" if headings else "none",
         root=root,
         images=images,
         summary=root.summary,

@@ -707,6 +707,7 @@ def browse_view() -> rx.Component:
             width="100%",
         ),
         rx.text(State.browse_title, size="4", weight="bold"),
+        rx.cond(State.browse_structure != "", rx.text(State.browse_structure, **MUTED, id="browse-structure")),
         rx.text("Click a section to read it.", **MUTED),
         rx.vstack(rx.foreach(State.browse_rows, outline_row), spacing="1", width="100%"),
         spacing="3",

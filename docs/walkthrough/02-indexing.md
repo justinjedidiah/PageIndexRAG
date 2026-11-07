@@ -35,36 +35,36 @@ def extract_docx(path: Path) -> list[Block]:
     return blocks
 ```
 
-A `.docx` file is a zip of XML files. The `python-docx` library opens it. `doc.element.body.iterchildren()` walks the main body **in document order**: each child is a paragraph (`w:p`) or a table (`w:tbl`) (or other things we ignore). `qn("w:p")` converts the short prefix form into the full namespaced XML name that the library uses internally, so the comparison `element.tag == ...` works.
+A `.docx` file is a zip of XML files. The `python-docx` library opens it. `_read` walks the main body **in document order**: each child is a paragraph (`w:p`), a table (`w:tbl`) or a **content control** (`w:sdt`, the boxes Word templates use for cover pages, forms and the table of contents), whose content is read the same way, as if the box were not there. `qn("w:p")` converts the short prefix form into the full namespaced XML name that the library uses internally, so the comparison `element.tag == ...` works.
 
 Reading in order matters: the order of blocks is the order of the document, and the tree builder depends on it.
 
-**Paragraph branch**
+**Paragraph branch** (`_read_paragraph`)
+
+1. Any images inside the paragraph are added first.
+2. Its text is read by `paragraph_text`, not python-docx's `paragraph.text`, which only reads plain runs and links and so misses text inside an inline content control or a tracked insertion. `paragraph_text` takes every piece of text (`w:t`, tabs, line breaks) except formatting, pictures and text boxes (a text box is stored twice for compatibility, so reading it would repeat it). Deleted tracked text is stored differently (`w:delText`) and so is left out: the document is read as it now stands. Blank paragraphs are skipped (an image-only paragraph still gave its image above).
+3. A **table-of-contents entry** (inside Word's ToC box, or styled "toc 1", "toc 2"...) becomes a `TocLine` (title, level, page), not text. See below.
+4. Otherwise, if Word gives the paragraph an **outline level**, it becomes a `Heading`; if not, a plain `Paragraph`.
 
 ```python
-blocks.extend(_images_in(element, doc))
-paragraph = DocxParagraph(element, doc)
-text = paragraph.text.strip()
-if not text:
-    continue
-level = _heading_level(paragraph)
-blocks.append(Heading(level, text) if level else Paragraph(text))
-```
-
-1. Any images inside this paragraph are added first.
-2. The paragraph is wrapped so its `.text` is readable. Blank paragraphs are skipped (an image-only paragraph still gave its image above).
-3. If the paragraph's **style** is "Heading N", it becomes a `Heading`; otherwise a plain `Paragraph`.
-
-```python
-_HEADING_STYLE = re.compile(r"^heading (\d)$", re.IGNORECASE)
-
-def _heading_level(paragraph):
+def _outline_level(paragraph):
+    value = _outline_value(paragraph._p.pPr)          # set on the paragraph itself?
     style = paragraph.style
-    match = _HEADING_STYLE.match(style.name) if style is not None and style.name else None
-    return int(match.group(1)) if match else None
+    while value is None and style is not None:      # else on its style, or the style that one is based on
+        value = _outline_value(style.element.pPr)
+        if value is None and _HEADING_STYLE.match(style.name):  # fallback: a "Heading N" style without one
+            return int(...)
+        style = style.base_style
+    return None if value is None or value >= 9 else value + 1
 ```
 
-This is the key to "Word has a ready-made structure": authors mark headings with the built-in *Heading 1 / 2 / 3* styles, and the style name is stored in the file. The regex `^heading (\d)$` accepts "Heading 1" in any capitalization and captures the digit as the level. Note the **Title** style (the big title line at the top of a document) does *not* match, so it becomes ordinary text. That is why, in the sample, the title ends up as the root's own text.
+This is the key to "Word has a ready-made structure". Word gives each paragraph an **outline level**: 0-8 for heading levels 1-9, or 9 for body text. The built-in *Heading 1 / 2 / 3* styles carry one, and so do most custom heading styles (a template's "Chapter Title", or any style "based on" a heading style). These are exactly the paragraphs Word's **Navigation Pane** lists, and what Word builds its own table of contents from, so the rule is easy to explain: **if Word's Navigation Pane shows your headings, the app does too.** An outline level set on a single paragraph wins over its style's, so a heading-styled paragraph set to "body text" is body text. The **Title** style has no outline level, so the big title line at the top becomes ordinary text: in the samples, the root's own text.
+
+**Word's table of contents**
+
+A table of contents inserted by Word (References > Table of Contents) sits in a content control marked "Table of Contents" (`_is_toc_control`), and its entries use the styles "toc 1", "toc 2"... (or just those style ids). Each entry becomes a `TocLine(level, title, page)`: "Installation⇥12" gives title "Installation", page "12". The box's own title ("Contents", which has no page number) is dropped. The tree builder skips `TocLine` blocks, so the ToC never ends up as text; the pipeline keeps the entries as the document's own ToC (`source_toc`, with pages). The ToC is not used to build the tree: it was generated *from* the headings, which already give the outline with exact positions.
+
+`build_index` records where the tree came from in `structure_source`: `"headings"`, or `"none"` when the document has none (its text is then cut by size). The Browse panel and `pageindex tree` show it, so a flat outline explains itself.
 
 **Images**
 
@@ -543,9 +543,9 @@ Used by the command line, the sample builder and the tests. The web page calls t
 
 ## Things that are not built, or limited
 
-1. **A Word file with no Heading styles gets no real structure.** All its text lands under the root and is only cut by size into balanced parts (one level, titled by their first sentence). The design intends to have Claude *generate* a table of contents for such files, and optionally pick topic boundaries when splitting; **neither is implemented yet**. Both are planned together with PDF.
+1. **A Word file without headings (no outline levels) gets no real structure.** Headings formatted by hand (bold, bigger, numbered) and typed contents pages are not used yet; both are planned next. All its text lands under the root and is only cut by size into balanced parts (one level, titled by their first sentence). The design intends to have Claude *generate* a table of contents for such files, and optionally pick topic boundaries when splitting; **neither is implemented yet**. Both are planned together with PDF.
 2. **PDF reading does not exist** (`NotImplementedError`, see above).
-3. Word features that are ignored: headers and footers, footnotes, text boxes, nested tables. Merged table cells may repeat their text.
+3. Word features that are ignored: headers and footers, footnotes, text boxes, nested tables, content controls inside table cells. Merged table cells may repeat their text.
 4. The token estimate is a rough rule (characters / 4).
 5. Splitting is by size, not by topic: a cut can fall between two sentences that belong together.
 6. If any one Claude call fails (a bad key, a rate limit), the **whole indexing run stops** and the half-built document is deleted. There is no "resume". (The Anthropic library already retries transient errors a couple of times by itself.)

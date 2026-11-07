@@ -107,6 +107,9 @@ class DocumentIndex(BaseModel):
     images: list[ImageRecord] = Field(default_factory=list)
     options: IndexOptions | None = None  # what was applied; None for indexes made before options existed
     indexed_with: IndexedWith | None = None  # None when no model was used (Free) or for older indexes
+    # Where the tree's sections came from: the document's headings, or none found (the text is cut by size).
+    # None for indexes made before this was recorded.
+    structure_source: Literal["headings", "none"] | None = None
 
     def node_map(self) -> dict[str, Node]:
         return {node.id: node for node in self.root.walk()}

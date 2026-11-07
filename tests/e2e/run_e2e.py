@@ -244,6 +244,10 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
             page.get_by_role("button", name="Browse").last.click()  # samples come first; Heron Notes is the only upload
             outline = page.locator("#source-panel")
             expect(outline.get_by_text("Heron Notes: Heron note 0.").first).to_be_visible(timeout=10000)
+            # A flat outline says why: the document has no headings.
+            expect(page.locator("#browse-structure")).to_have_text(
+                "No headings found in this document, so its text is split into parts by size.", timeout=10000
+            )
 
         step("its outline shows parts titled by their first sentence", browse_free, "02c-free-outline.png")
         step("the outline closes", dismiss_dialog)
