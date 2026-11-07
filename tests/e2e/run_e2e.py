@@ -139,8 +139,9 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
         # Warm-up: the first load of a fresh dev server makes Vite optimize dependencies and hot-swap
         # modules, which can log framework warnings that are not about the app. Load once, let it settle.
         warmup = browser.new_page()
-        warmup.goto(FRONTEND, wait_until="networkidle", timeout=120000)
-        warmup.wait_for_timeout(5000)
+        for route in ("/", "/app"):
+            warmup.goto(FRONTEND + route, wait_until="networkidle", timeout=120000)
+            warmup.wait_for_timeout(5000)
         warmup.close()
 
         page = browser.new_page(viewport={"width": 1280, "height": 860})
@@ -174,6 +175,22 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
             assert close.count() == 0, "panel still open: " + repr(panel_text) + " " + " ".join(seen) + " " + "; ".join(problems[-3:])
 
         page.goto(FRONTEND, wait_until="networkidle", timeout=90000)
+
+        def home_page() -> None:
+            expect(page.get_by_role("heading", name="Retrieval without vectors")).to_be_visible(timeout=30000)
+            expect(page.get_by_text("How it works").first).to_be_visible()
+            expect(page.get_by_placeholder("Add your API key to chat")).to_have_count(0)  # the app is not on this page
+            width = page.evaluate("document.documentElement.scrollWidth")
+            assert width <= 1280, f"the home page scrolls sideways: {width}px wide"
+
+        step("the home page explains the project", home_page, "00-home.png")
+
+        def home_to_app() -> None:
+            page.get_by_role("link", name="Try it now").click()
+            page.wait_for_url(FRONTEND + "/app", timeout=30000)
+            expect(page.get_by_placeholder("Add your API key to chat")).to_be_visible(timeout=30000)
+
+        step("the home page opens the app at /app", home_to_app)
 
         def loads() -> None:
             expect(page.get_by_text("TOC RAG").first).to_be_visible(timeout=30000)

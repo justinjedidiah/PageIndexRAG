@@ -55,11 +55,12 @@ TOC-RAG/
 │   └─ cli.py                   developer command line (`tocrag ...`)                  (04)
 ├─ toc_app/               THE WEBSITE (Reflex). Imports the core, never the reverse.
 │   ├─ state.py                 every button's behaviour                                  (05)
-│   ├─ views.py                 what the page looks like                                  (05)
+│   ├─ views.py                 what the app page (/app) looks like                       (05)
+│   ├─ home.py                  the product page at /, no state                           (05)
 │   ├─ files.py                 serves document images                                    (05)
 │   ├─ viewmodels.py            small data shapes for the page                            (05)
 │   ├─ runtime.py               shared settings + session manager                         (05)
-│   └─ toc_app.py         the app, its page, the 5-minute cleanup loop              (05)
+│   └─ toc_app.py               the app, its two pages, the 5-minute cleanup loop         (05)
 ├─ rxconfig.py, assets/app.css  Reflex configuration, theme, stylesheet                   (05)
 ├─ samples/source, samples/index   the 3 sample documents and their indexes               (06)
 ├─ scripts/build_samples.py     makes the sample documents and indexes them               (06)
@@ -157,7 +158,7 @@ Visitor clicks a citation
 | Change what the agent is told | `graph.py` `SYSTEM_PROMPT` (03) |
 | Change how many steps/parallel calls/limits | `config.py` (04) and the env table there |
 | Improve PDF reading | `indexing/pdf_extract.py` (02): lines to paragraphs, bookmarks; page ranges in `indexing/pages.py` |
-| Change the page's look | `views.py`, `rxconfig.py`, `assets/app.css` (05) |
+| Change the page's look | `views.py` (app), `home.py` (home page), `rxconfig.py`, `assets/app.css` (05) |
 | Change what a button does | the handler in `state.py` (05) |
 | Change the session lifetime | `TOC_RAG_SESSION_TTL_SECONDS` (04) |
 | Add a test | the matching `tests/test_*.py` (06) |

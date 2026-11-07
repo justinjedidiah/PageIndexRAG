@@ -13,7 +13,7 @@ Code-level walkthrough of every module (read `docs/walkthrough/00-start-here.md`
 - `src/toc_rag/agent/`: `Navigator` (one document), `LibraryNavigator` (many documents, step trace) and the LangGraph loop in `graph.py` (`stream_agent` yields steps then the answer)
 - `src/toc_rag/models.py`: Node, Location, ImageRecord, DocumentIndex, LibraryEntry
 - `src/toc_rag/`: also `sessions.py` (per-visitor folders, 2h expiry sweep), `uploads.py` (pdf/docx validation), `library.py` (samples + session docs; `page_file` renders an uploaded PDF's page via `pdf_pages.py`), `outline.py`, `errors.py` (provider-neutral safe error messages), `providers.py` (Anthropic / OpenAI / Gemini: model creation and live model listing, no default models; `LLMConfig` = provider + key + models), `llm.py` (thin wrapper)
-- `toc_app/`: Reflex UI: `state.py` (events), `views.py` (page), `files.py` (image route), `runtime.py`. Imports the core package, never the reverse. State helper methods start with `_` so Reflex does not make them events.
+- `toc_app/`: Reflex UI: `home.py` (product page at `/`, no state), `views.py` (the app at `/app`), `state.py` (events), `files.py` (image route), `runtime.py`. Imports the core package, never the reverse. State helper methods start with `_` so Reflex does not make them events.
 
 ## Commands
 - Setup: `python -m venv .venv`, then `.venv/Scripts/pip install -e ".[dev,app]"`; copy `.env.example` to `.env` and set the key for `TOC_RAG_PROVIDER` (default `anthropic`: `ANTHROPIC_API_KEY`; or `OPENAI_API_KEY`, `GOOGLE_API_KEY`)

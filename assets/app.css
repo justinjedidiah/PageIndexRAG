@@ -86,3 +86,8 @@ body {
   outline: 2px solid #fff;
 }
 
+
+/* The home page's "How it works" button jumps to its section. */
+html {
+  scroll-behavior: smooth;
+}

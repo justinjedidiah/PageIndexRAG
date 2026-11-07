@@ -886,12 +886,21 @@ def session_timer() -> rx.Component:
 
 def header() -> rx.Component:
     return rx.hstack(
-        rx.center(rx.icon("book-open-text", size=18), width="36px", height="36px", border=BORDER, border_radius="10px", background=SURFACE),
-        rx.vstack(
-            rx.text("TOC RAG", size="3", weight="bold"),
-            rx.text("Vectorless RAG: chat by navigating a table of contents", size="1", color_scheme="gray", display=["none", "none", "block"]),
-            spacing="0",
-            align="start",
+        rx.link(  # back to the home page
+            rx.hstack(
+                rx.center(rx.icon("book-open-text", size=18), width="36px", height="36px", border=BORDER, border_radius="10px", background=SURFACE),
+                rx.vstack(
+                    rx.text("TOC RAG", size="3", weight="bold"),
+                    rx.text("Vectorless RAG: chat by navigating a table of contents", size="1", color_scheme="gray", display=["none", "none", "block"]),
+                    spacing="0",
+                    align="start",
+                ),
+                align="center",
+            ),
+            href="/",
+            underline="none",
+            color="inherit",
+            title="Home",
         ),
         rx.spacer(),
         session_timer(),

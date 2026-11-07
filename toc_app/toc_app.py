@@ -6,6 +6,7 @@ import logging
 import reflex as rx
 
 from .files import api
+from .home import APP_ROUTE, home
 from .runtime import sessions
 from .state import State
 from .views import index
@@ -23,7 +24,14 @@ app = rx.App(
         rx.el.link(rel="icon", href="/favicon.ico", sizes="48x48"),
     ],
 )
-app.add_page(index, route="/", title="TOC RAG", on_load=State.on_load)
+# "/" is the static home page; the app itself (key, library, chat) is at "/app".
+app.add_page(
+    home,
+    route="/",
+    title="TOC RAG: vectorless RAG over your documents",
+    description="An AI agent answers questions about your PDF and Word documents by navigating their table of contents, with cited sources.",
+)
+app.add_page(index, route=APP_ROUTE, title="TOC RAG", on_load=State.on_load)
 
 
 async def sweep_expired_sessions() -> None:

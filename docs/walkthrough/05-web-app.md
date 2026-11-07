@@ -1,6 +1,6 @@
 # 05. The web app (Reflex)
 
-Files covered: everything in `toc_app/` (`runtime.py`, `viewmodels.py`, `files.py`, `state.py`, `views.py`, `toc_app.py`), plus `rxconfig.py` and `assets/app.css`.
+Files covered: everything in `toc_app/` (`runtime.py`, `viewmodels.py`, `files.py`, `state.py`, `views.py`, `home.py`, `toc_app.py`), plus `rxconfig.py` and `assets/app.css`.
 
 Everything so far (files 01-04) is plain Python with no web in it. This layer puts a website on top. The web app contains **no document logic of its own**: it calls the functions from the earlier files and shows the results. (That is deliberate: the core package never imports anything from `toc_app`, which is why it can be tested and used from the command line without a browser.)
 
@@ -81,12 +81,14 @@ Starlette is the small web framework Reflex itself is built on, so this plugs in
 
 ```python
 app = rx.App(api_transformer=api, stylesheets=["/app.css"])
-app.add_page(index, route="/", title="TOC RAG", on_load=State.on_load)
+app.add_page(home, route="/", title="TOC RAG: vectorless RAG over your documents", description=...)
+app.add_page(index, route=APP_ROUTE, title="TOC RAG", on_load=State.on_load)  # APP_ROUTE = "/app"
 ```
 
 - `api_transformer=api` merges our image route into the server. Reflex puts its own app *inside* ours, so our routes are checked first.
 - `stylesheets=["/app.css"]` loads `assets/app.css` (the `assets` folder is served as-is).
-- `add_page` registers the single page: the function `index` (in `views.py`) draws it at `/`; `on_load=State.on_load` runs that handler **every time the page is opened**, to load the document list.
+- Two pages. `home` (in `home.py`) is the product page at `/`: what the project is, how it works, the comparison with vector RAG, features, and links into the app. It uses **no state** (plain components only, no `on_load`), so it costs the server nothing per visit. Its wording follows `README.md`.
+- `index` (in `views.py`) is the app itself at `/app`; `on_load=State.on_load` runs that handler **every time the page is opened**, to load the document list. The app header's logo links back to `/`. Moving between the two pages happens in the browser without a reload; the two scripts `on_load` installs (countdown, picture zoom) guard against being set up twice.
 
 ```python
 async def sweep_expired_sessions() -> None:

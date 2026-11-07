@@ -8,7 +8,7 @@ Upload a Word document or a PDF (or try the sample library), bring your own API 
 ![An answer with the agent's navigation path and citations](docs/images/screenshot.png)
 -->
 
-> **Status:** works end to end locally. Word (.docx) and text PDFs are supported (PDF: bookmarks or a printed contents page, page-number citations with a view of the pages, charts and pictures as images, ruled tables, two columns). A public demo is planned (Railway).
+> **Status:** works end to end locally. Word (.docx) and text PDFs are supported (PDF: bookmarks or a printed contents page, page-number citations with a view of the pages, charts and pictures as images, ruled tables, two columns). Ready to deploy on Railway (see below).
 
 ## How it works
 
@@ -46,7 +46,7 @@ python -m venv .venv
 reflex run
 ```
 
-Open http://localhost:3000 and paste an API key in the app. No `.env` is needed for the web app: it only ever uses the key a visitor enters.
+Open http://localhost:3000 for the home page, or http://localhost:3000/app for the app itself, and paste an API key there. No `.env` is needed for the web app: it only ever uses the key a visitor enters.
 
 ## Run with Docker
 
@@ -61,9 +61,20 @@ docker build -t toc-rag .
 docker run -p 8000:8000 toc-rag
 ```
 
-Open http://localhost:8000 (stop `reflex run` first if it is running, since it uses port 8000 too). The first start takes a minute or two while the pages are built. One container serves both the page and the backend, on the port in `PORT` (default 8000).
+Open http://localhost:8000 (the app is at `/app`; stop `reflex run` first if it is running, since it uses port 8000 too). The first start takes a minute or two while the pages are built. One container serves both the page and the backend, on the port in `PORT` (default 8000).
 
 When it runs on a public address, set `API_URL` to that address (for example `https://toc-rag.example.com`), so the page knows where to reach the backend. On Railway this is filled in automatically from the app's public domain. Never set an API key on the server: the app only uses the key each visitor enters. Uploads live inside the container and are deleted after 2 hours, so no volume is needed.
+
+## Deploy on Railway
+
+`railway.json` tells Railway to build the `Dockerfile` and to wait up to 5 minutes for `/ping` on start (the pages are built when the container starts).
+
+1. Push the repository to GitHub.
+2. In Railway: **New project → Deploy from GitHub repo**, and pick this repository.
+3. In the service: **Settings → Networking → Generate domain**. The page is built with that address, so redeploy once after generating it.
+4. Set no variables: Railway provides `PORT` and `RAILWAY_PUBLIC_DOMAIN` itself. Never add an API key.
+
+The home page is at the domain's root and the app at `/app`.
 
 ## Tests
 
@@ -94,7 +105,6 @@ samples/        the sample documents and their indexes
 ## Roadmap
 
 - Generated structure for documents without headings
-- A public demo
 - An evaluation against a vector-RAG baseline
 
 ## Credits
