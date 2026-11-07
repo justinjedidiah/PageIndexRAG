@@ -350,7 +350,7 @@ finally:
         if self._chat_generation == generation and self.thinking:
             self._finish_answer(generation, None)
 ```
-Errors become a grey assistant message flagged `error` (a custom `EmptyLibrary` exception is used instead of a built-in one so unrelated errors can't be mistaken for it). `finally` guarantees `thinking` is switched off and the live answer cleared **no matter what happened**, so the input box can never get stuck disabled, unless the chat was cleared meanwhile, in which case End session already did that.
+Errors become an assistant message flagged `error` (a custom `EmptyLibrary` exception is used instead of a built-in one so unrelated errors can't be mistaken for it). `finally` guarantees `thinking` is switched off and the live answer cleared **no matter what happened**, so the input box can never get stuck disabled, unless the chat was cleared meanwhile, in which case End session already did that.
 
 **`_answer_fields(result, library, token)`** turns the agent's `AnswerResult` into the fields of the bubble: text, found flag, citations as `CitationView` (the click target `ref` = `doc_id:node_id`) and images as `ImageView` with their URLs (each image's scope is `sample` or the visitor's token).
 
@@ -396,7 +396,7 @@ Renders text as Markdown (answers, section text) with table borders and images t
 - A scrolling area containing: `empty_chat()` (instructions, and the four sample-question cards) **only while there are no messages**; the messages (`rx.foreach(State.messages, message_view)`); and an invisible box with `id="chat-end"` that the scroll script targets.
 - `message_view`: `rx.cond(message.role == "user", <bubble on the right>, assistant_message(message))`.
 - `live_answer` is the answer being written, shown under the messages while `thinking`: its steps so far, then a spinner and "Working..." until text arrives, then the text as it streams.
-- `assistant_message` (a finished answer) stacks, in order: the steps (`rx.foreach(message.steps, step_line)`, only when there are any): each is the model's one-line note as normal text, then a small grey line saying what it did, so the message reads like a conversation; the answer (`prose` if `found`, grey plain text if not); the images; and the **citation chips** (each one `on_click=State.open_source(citation.ref)`).
+- `assistant_message` (a finished answer) stacks, in order: the steps (`rx.foreach(message.steps, step_line)`, only when there are any): each is the model's one-line note at the same size as the answer, then a small grey line saying what it did, so the message reads like a conversation; the answer (`prose`, the same look whether or not it was found); the images; and the **citation chips** (each one `on_click=State.open_source(citation.ref)`).
 - `composer`: a form with the text input named `question`, sending `State.ask` on submit and clearing itself (`reset_on_submit`). The input and the arrow button are disabled when `can_chat` is false.
 
 ### Right column (`source_panel`)

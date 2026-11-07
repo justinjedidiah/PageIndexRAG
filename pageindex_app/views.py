@@ -530,7 +530,7 @@ def answer_image(image: ImageView) -> rx.Component:
 def step_line(step: StepView) -> rx.Component:
     """What the model said, then what it did, so the answer reads as a conversation."""
     return rx.vstack(
-        rx.cond(step.note != "", rx.text(step.note, size="2")),
+        rx.cond(step.note != "", rx.text(step.note, size="3")),  # same size as the answer: it is the model talking too
         rx.hstack(
             rx.icon("corner-down-right", size=12, color="var(--gray-9)"),
             rx.text(step.label, size="1", color_scheme="gray"),
@@ -560,12 +560,8 @@ def live_answer() -> rx.Component:
 def assistant_message(message: ChatMessage) -> rx.Component:
     return rx.vstack(
         rx.cond(message.steps.length() > 0, rx.vstack(rx.foreach(message.steps, step_line), spacing="2", align="start")),
-        rx.cond(
-            message.text != "",
-            # Uncited replies (no answer found, errors, or questions about the outline itself) are grey, but
-            # still Markdown: a reply about the table of contents can be a real, formatted answer.
-            rx.cond(message.found, prose(text=message.text), rx.box(prose(text=message.text), color="var(--gray-11)")),
-        ),
+        # Every reply looks the same, cited or not: "not found" is still an answer.
+        rx.cond(message.text != "", prose(text=message.text)),
         rx.foreach(message.images, answer_image),
         rx.cond(
             message.citations.length() > 0,
