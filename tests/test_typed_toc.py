@@ -151,3 +151,25 @@ def test_a_word_document_with_only_a_typed_contents_page(tmp_path, settings):
     ]
     assert index.root.text == "Home Solar Guide"
     assert [(e.title, e.level, e.page) for e in index.source_toc][:2] == [("Getting started", 1, "2"), ("Installation", 2, "2")]
+
+
+def test_a_title_printed_over_two_lines_is_found():
+    blocks = [
+        P("Overview ... 1"), P("Box A: Global supply chains ... 2"), P("Outlook ... 3"),
+        P("Overview"), P(BODY), P("Box A"), P("Global supply chains"), P(BODY), P("Outlook"), P(BODY),
+    ]
+    result, used = apply_typed_toc(blocks)
+    assert used and headings(result) == [(1, "Overview"), (1, "Box A: Global supply chains"), (1, "Outlook")]
+    assert P("Box A") not in result  # both lines became the one heading
+
+
+def test_chapters_named_by_numeral_go_above_their_sections():
+    blocks = [
+        P("Overview ... 1"), P("I. Progress ... 2"), P("Resilience ... 2"), P("II. Debt ... 5"), P("Introduction ... 5"),
+        P("Overview"), P(BODY), P("I. Progress"), P(BODY), P("Resilience"), P(BODY), P("II. Debt"), P(BODY),
+        P("Introduction"), P(BODY),
+    ]
+    result, used = apply_typed_toc(blocks)
+    assert used and headings(result) == [
+        (2, "Overview"), (1, "I. Progress"), (2, "Resilience"), (1, "II. Debt"), (2, "Introduction"),
+    ]

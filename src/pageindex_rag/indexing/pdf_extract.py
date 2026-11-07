@@ -38,6 +38,7 @@ MARGIN = 0.1  # running headers and footers sit in the top or bottom tenth of th
 RUNNING_MIN_PAGES = 3  # a margin line recurring on at least this many pages,
 RUNNING_MIN_SHARE = 0.2  # and on at least this share of them, is a running header or footer
 MAX_FIGURES = 300  # per document: charts, tables and pictures past this stay as text (or are skipped)
+ROMAN = re.compile(r"^[ivxlcdm]{1,7}$")
 PAGE_NUMBER = re.compile(r"^[\W#]*((page|p\.)\s*)?#(\s*(of|/)\s*#)?[\W#]*$", re.IGNORECASE)
 
 
@@ -153,8 +154,15 @@ def _lines(raw: list[dict]) -> list[_Line]:
 
 
 def _running_key(text: str) -> str:
-    """A margin line without its numbers, so "10 Annual Report 2026" and "Annual Report 2026 11" are the same footer."""
-    return " ".join(re.sub(r"\d+", " ", text.lower()).split())
+    """A margin line without its page numbers, so "10 Annual Report 2026", "Annual Report 2026 11" and
+    "Annual Report 2026 iii" (roman, in the front matter) are the same footer."""
+    words = re.sub(r"\d+", " ", text.lower()).split()
+    # A roman page number sits at either end; "did" or "mix" inside the line are words.
+    while words and ROMAN.match(words[0]):
+        words.pop(0)
+    while words and ROMAN.match(words[-1]):
+        words.pop()
+    return " ".join(words)
 
 
 def _is_page_number(text: str) -> bool:

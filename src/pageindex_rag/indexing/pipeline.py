@@ -56,7 +56,8 @@ def build_index(
     # Where the outline comes from, in order: a PDF's bookmarks or the headings, else a typed contents page,
     # else lines formatted like headings, else nothing (the text is then cut by size). The first that finds one wins.
     has_headings = any(isinstance(b, Heading) for b in blocks)
-    blocks, from_contents_page = apply_typed_toc(blocks)  # a typed contents page: removed, and used if no headings
+    # A typed contents page: removed, and used if no headings (in a PDF, checked against its page numbers).
+    blocks, from_contents_page = apply_typed_toc(blocks, page_labels)
     from_looks = False
     if not has_headings and not from_contents_page:
         blocks, from_looks = apply_heading_looks(blocks)

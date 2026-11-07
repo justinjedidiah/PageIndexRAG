@@ -21,7 +21,7 @@ WIDTH = 450
 
 
 def make_pdf(path, pages, bookmarks=True, labels=None, encrypt=None):
-    """Draw pages of ("h", title) headings (bold 16 pt) and ("p", text) paragraphs (11 pt, wrapped).
+    """Draw pages of ("h", title) headings (bold 16 pt) and ("p", text) paragraphs (11 pt, wrapped; ("p", text, indent)).
 
     With bookmarks on, each heading gets a bookmark pointing at it; a level can be given as ("h", title, 2).
     `labels` is a list of (first page index, style, start) for printed page numbers.
@@ -42,9 +42,10 @@ def make_pdf(path, pages, bookmarks=True, labels=None, encrypt=None):
                 c.drawString(72, y, text)
                 y -= 30
             else:
+                indent = item[2] if len(item) > 2 else 0  # ("p", text, indent) for an indented line
                 c.setFont("Helvetica", 11)
                 for line in simpleSplit(text, "Helvetica", 11, WIDTH):
-                    c.drawString(72, y, line)
+                    c.drawString(72 + indent, y, line)
                     y -= 14
                 y -= 12  # the gap between paragraphs
         c.showPage()
@@ -455,3 +456,85 @@ def test_figures_reach_the_index_cited_by_their_own_page(tmp_path, settings):
     record = index.images[0]
     assert record.node_id == output.id and record.location.label() == "p. 1"  # its own page, not the section's
     assert record.mime == "image/png" and (tmp_path / "data" / "docs" / index.doc_id / record.file).is_file()
+
+
+
+# ---- a typed contents page in a PDF without bookmarks (typed_toc.py with page numbers) ----
+
+
+def test_a_contents_page_builds_the_outline_checked_against_page_numbers(tmp_path, settings):
+    pages = [
+        [("p", "Home Solar Guide")],
+        [("p", "Contents"), ("p", "Getting started ........ 1"), ("p", "Wiring ........ 2", 18), ("p", "Maintenance ........ 3")],
+        [("p", "Getting started"), ("p", BODY * 4), ("p", "Wiring"), ("p", "See the wiring section for cable sizes.")],  # a mention
+        [("p", "Wiring"), ("p", BODY * 4)],
+        [("p", "Maintenance"), ("p", BODY * 4)],
+    ]
+    path = make_pdf(tmp_path / "guide.pdf", pages, labels=[(0, "ROMAN_LOWER", 1), (2, "ARABIC", 1)])
+    index = index_of(tmp_path, settings, path, small_sections="off")
+    assert index.structure_source == "typed_toc"
+    assert [(n.title, n.location.label(), [c.title for c in n.children]) for n in index.root.children] == [
+        ("Getting started", "pp. 1-2", ["Wiring"]), ("Maintenance", "p. 3", []),  # a section spans its subsections
+    ]
+    wiring = index.root.children[0].children[0]
+    assert wiring.location.label() == "p. 2"  # the real section, not the short "Wiring" line on page 1
+    assert "See the wiring section" in index.root.children[0].text
+
+
+def test_without_page_labels_the_offset_is_learnt(tmp_path, settings):
+    """Printed numbers start after a cover and a contents page: "1" is the third page."""
+    pages = [
+        [("p", "Home Solar Guide")],
+        [("p", "Contents"), ("p", "Getting started ........ 1"), ("p", "Wiring ........ 2"), ("p", "Maintenance ........ 3")],
+        [("p", "Getting started"), ("p", BODY * 4)],
+        [("p", "Wiring"), ("p", BODY * 4)],
+        [("p", "Maintenance"), ("p", BODY * 4), ("p", "Wiring"), ("p", "is covered on page 2.")],
+    ]
+    index = index_of(tmp_path, settings, make_pdf(tmp_path / "plain.pdf", pages), small_sections="off")
+    assert index.structure_source == "typed_toc"
+    assert [(n.title, n.location.pdf_page_start) for n in index.root.children] == [
+        ("Getting started", 2), ("Wiring", 3), ("Maintenance", 4),
+    ]
+
+
+def test_a_contents_page_over_two_pages_with_different_margins_keeps_its_levels(tmp_path):
+    c = canvas.Canvas(str(tmp_path / "margins.pdf"))
+    entries = [  # (page of the contents, left edge, indent, title, page number)
+        (0, 72, 0, "Getting started", 3), (0, 72, 18, "Installation", 3), (0, 72, 0, "Wiring", 4),
+        (1, 40, 18, "Cables", 4), (1, 40, 0, "Maintenance", 5), (1, 40, 18, "Cleaning", 5),
+    ]
+    for page in (0, 1):
+        c.setFont("Helvetica", 11)
+        for row, (on, left, indent, title, number) in enumerate(e for e in entries if e[0] == page):
+            c.drawString(left + indent, 700 - row * 26, f"{title} ........ {number}")
+        c.showPage()
+    for pair in (("Getting started", "Installation"), ("Wiring", "Cables"), ("Maintenance", "Cleaning")):
+        for top, title in zip((700, 420), pair):  # two sections a page, on pages 3, 4 and 5
+            c.setFont("Helvetica", 11)
+            c.drawString(72, top, title)
+            for i, line in enumerate(simpleSplit(BODY * 2, "Helvetica", 11, WIDTH)):
+                c.drawString(72, top - 30 - i * 14, line)
+        c.showPage()
+    c.save()
+    from pageindex_rag.indexing.typed_toc import apply_typed_toc
+
+    content = extract_pdf(tmp_path / "margins.pdf")
+    blocks, used = apply_typed_toc(content.blocks, content.page_labels)
+    assert used
+    assert [(b.level, b.title) for b in blocks if isinstance(b, Heading)] == [
+        (1, "Getting started"), (2, "Installation"), (1, "Wiring"), (2, "Cables"), (1, "Maintenance"), (2, "Cleaning"),
+    ]
+
+
+def test_roman_page_numbers_in_a_footer_are_removed(tmp_path):
+    c = canvas.Canvas(str(tmp_path / "roman.pdf"))
+    for n, roman in enumerate(("i", "ii", "iii", "iv", "v")):
+        c.setFont("Helvetica", 9)
+        c.drawString(72, 30, f"Annual Solar Report {roman}")
+        c.setFont("Helvetica", 11)
+        c.drawString(72, 700, f"Front matter page {n + 1} about panels and inverters.")
+        c.showPage()
+    c.save()
+    assert [b.text for b in extract_pdf(tmp_path / "roman.pdf").blocks] == [
+        f"Front matter page {n} about panels and inverters." for n in range(1, 6)
+    ]

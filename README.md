@@ -8,7 +8,7 @@ Upload a Word document or a PDF (or try the sample library), bring your own API 
 ![An answer with the agent's navigation path and citations](docs/images/screenshot.png)
 -->
 
-> **Status:** works end to end locally. Word (.docx) and text PDFs are supported (PDF: bookmarks, page-number citations, charts and pictures as images, ruled tables, two columns). A public demo is planned (Railway).
+> **Status:** works end to end locally. Word (.docx) and text PDFs are supported (PDF: bookmarks or a printed contents page, page-number citations, charts and pictures as images, ruled tables, two columns). A public demo is planned (Railway).
 
 ## How it works
 
