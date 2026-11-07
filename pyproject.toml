@@ -22,7 +22,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-app = ["reflex>=0.7"]
+app = ["reflex>=0.10,<0.11"]  # the app relies on 0.10's token, upload and state-manager behaviour
 dev = ["pytest>=8", "playwright>=1.45", "reportlab>=4"]
 
 [project.scripts]

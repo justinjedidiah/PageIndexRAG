@@ -124,6 +124,7 @@ def main() -> int:
     server_log = log_path.read_bytes().decode("utf-8", "replace")
     frontend_errors = [line.strip() for line in server_log.splitlines() if "Frontend Exception" in line or "Error:" in line]
     results.append(("no frontend exceptions in the server log", not frontend_errors, "; ".join(frontend_errors[:3])[:300]))
+    results.append(("the key never appears in the server log", KEY not in server_log, ""))
 
     print()
     for name, ok, detail in results:
@@ -574,7 +575,11 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
         step("uploading a sample document is refused", sample_file_is_refused)
 
         def key_not_on_disk() -> None:
-            hits = [str(f) for f in data.rglob("*") if f.is_file() and KEY.encode() in f.read_bytes()]
+            # The data folder, and the project's own runtime folders: Reflex can pickle state (a backend var
+            # holding the key) to .states/ if its state manager is not "memory".
+            places = [data, ROOT / ".states", ROOT / ".web" / "backend"]
+            files = [f for place in places if place.is_dir() for f in place.rglob("*") if f.is_file()]
+            hits = [str(f) for f in files if KEY.encode() in f.read_bytes()]
             assert not hits, f"key found in {hits}"
             assert any((data / "sessions").iterdir()), "no session folder was created"
 

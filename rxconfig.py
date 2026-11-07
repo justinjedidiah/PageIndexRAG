@@ -46,6 +46,18 @@ def _public_address() -> dict[str, str]:
     return {"api_url": f"https://{domain}", "deploy_url": f"https://{domain}"} if domain else {}
 
 
+def _allowed_origins() -> dict[str, list[str]]:
+    """Only the app's own page may open a connection to the backend once it has a public address.
+
+    Reflex allows every origin by default. Locally (no public address) that default stays, since the dev
+    frontend and backend run on different ports.
+    """
+    public = os.getenv("API_URL") or os.getenv("REFLEX_API_URL")
+    if not public and (domain := os.getenv("RAILWAY_PUBLIC_DOMAIN")):
+        public = f"https://{domain}"
+    return {"cors_allowed_origins": [public.rstrip("/")]} if public else {}
+
+
 config = rx.Config(
     app_name="toc_app",
     plugins=[
@@ -54,5 +66,9 @@ config = rx.Config(
         )
     ],
     disable_plugins=[rx.plugins.SitemapPlugin],
+    # Visitor state (their API key included) stays in memory. Reflex's default pickles it to .states/ on disk,
+    # and it switches to Redis by itself when REDIS_URL is set: naming the mode here rules out both.
+    state_manager_mode=rx.constants.StateManagerMode.MEMORY,
     **_public_address(),
+    **_allowed_origins(),
 )

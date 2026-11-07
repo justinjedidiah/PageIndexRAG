@@ -220,7 +220,7 @@ def upload_form() -> rx.Component:
                 State.building,
                 rx.vstack(
                     rx.spinner(size="2"),
-                    rx.text("Reading the document...", size="2", text_align="center"),
+                    rx.text(State.building_label, size="2", text_align="center"),
                     align="center",
                     spacing="2",
                 ),

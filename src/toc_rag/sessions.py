@@ -6,6 +6,7 @@ no reliable "visitor left" event (a dropped connection or a reload is not a depa
 so the expiry sweep is what guarantees cleanup; `delete` is the early exit.
 """
 
+import hashlib
 import json
 import re
 import shutil
@@ -26,6 +27,18 @@ class Session:
     created: float
     expires_at: float
     was_reset: bool = False  # an earlier session with this token had expired and was wiped
+
+
+def session_id_for(client_token: str) -> str:
+    """The session folder's name for a visitor's client token: a one-way hash of it.
+
+    The id shows up in file URLs (and so in browser history and server logs). The client token itself
+    must not: the web framework attaches whoever presents it to that visitor's state, key included.
+    The token is random, so its hash cannot be turned back into it.
+    """
+    if not client_token:
+        return ""
+    return hashlib.sha256(f"toc-rag-session:{client_token}".encode()).hexdigest()[:40]
 
 
 def describe_duration(seconds: float) -> str:
@@ -79,6 +92,17 @@ class SessionManager:
 
     def delete(self, token: str) -> None:
         shutil.rmtree(self.session_dir(token), ignore_errors=True)
+
+    def count(self) -> int:
+        """How many live sessions there are (expired ones still waiting for the sweep are not counted)."""
+        if not self.root.is_dir():
+            return 0
+        now = self.clock()
+        return sum(
+            1
+            for directory in self.root.iterdir()
+            if directory.is_dir() and (created := self._created(directory)) is not None and now - created < self.ttl
+        )
 
     def sweep(self) -> int:
         """Delete every expired session folder. Returns how many were removed."""

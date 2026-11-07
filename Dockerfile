@@ -28,10 +28,11 @@ RUN useradd --create-home --uid 1000 app \
     && mkdir /app && chown app:app /app
 WORKDIR /app
 
-# The Python packages first, so a change to the app's code does not reinstall them.
-COPY pyproject.toml ./
+# The Python packages first, so a change to the app's code does not reinstall them. Exact versions from
+# constraints.txt: the ones the tests passed with, so a new release never reaches the server untested.
+COPY pyproject.toml constraints.txt ./
 COPY src ./src
-RUN pip install ".[app]"
+RUN pip install -c constraints.txt ".[app]"
 
 COPY --chown=app:app . .
 USER app

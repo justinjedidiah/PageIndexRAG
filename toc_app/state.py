@@ -33,6 +33,7 @@ from toc_rag.library import SAMPLE_SCOPE, Library
 from toc_rag.providers import PROVIDER_IDS, PROVIDERS, LLMConfig, list_models
 from toc_rag.models import DocumentIndex, IndexOptions
 from toc_rag.outline import node_markdown, outline_rows
+from toc_rag.sessions import session_id_for
 from toc_rag.uploads import UploadError, safe_filename, validate_upload
 
 from .runtime import sessions, settings
@@ -62,6 +63,17 @@ class IndexingJob:
 
 
 _jobs: dict[str, IndexingJob] = {}  # session token -> its running job
+
+# Reading a document (above all a long PDF) is the one CPU-heavy step, so only this many run at once for
+# all visitors together; the others wait their turn instead of slowing the server down for everyone.
+_read_slots = asyncio.Semaphore(settings.max_parallel_reads)
+READING = "Reading the document..."
+WAITING = "Waiting for a free slot: other visitors' documents are being read first..."
+
+
+async def _read_document(path: Path, store, options: IndexOptions) -> DocumentIndex:
+    async with _read_slots:
+        return await asyncio.to_thread(build_index, path, store, settings, options)
 
 
 def image_url(scope: str, doc_id: str, relative: str) -> str:
@@ -210,6 +222,7 @@ class State(rx.State):
 
     upload_error: str = ""
     building: bool = False
+    building_label: str = READING
     # The unsummarized index waits on disk (pending.json in the session folder), not in state:
     # Reflex wraps objects held in state in proxies that worker threads must not mutate.
     _pending_id: str = ""
@@ -329,7 +342,8 @@ class State(rx.State):
         self.agent_model = ""
 
     def _token(self) -> str:
-        return self.router.session.client_token
+        """This visitor's session id (names their folder, appears in file URLs). Never the client token itself."""
+        return session_id_for(self.router.session.client_token)
 
     def _library(self) -> Library:
         return Library.for_session(settings, sessions, self._token() or None)
@@ -470,7 +484,7 @@ class State(rx.State):
             yield
             try:
                 path = sessions.uploads_dir(self._token()) / self._pending_file
-                index = await asyncio.to_thread(build_index, path, sessions.store(self._token()), settings, self._options())
+                index = await _read_document(path, sessions.store(self._token()), self._options())
                 pending_path(self._token()).write_text(index.model_dump_json(), encoding="utf-8")
                 self.upload_error = ""
             except Exception:
@@ -594,10 +608,14 @@ class State(rx.State):
         if not replacing and self.own_doc_count >= settings.max_session_docs:
             self.upload_error = f"You can keep up to {settings.max_session_docs} documents in a session. Delete one first."
             return
+        token = self._token()
+        if sessions.get(token) is None and sessions.count() >= settings.max_sessions:
+            self.upload_error = "The server is full right now. Try again later; the sample library still works."
+            return
 
         self.building = True
+        self.building_label = WAITING if _read_slots.locked() else READING
         yield
-        token = self._token()
         path: Path | None = None
         try:
             sessions.ensure(token)
@@ -606,7 +624,11 @@ class State(rx.State):
             path = directory / name
             path.write_bytes(data)
             store = sessions.store(token)
-            index = await asyncio.to_thread(build_index, path, store, settings, self._options())
+            async with _read_slots:
+                if self.building_label != READING:
+                    self.building_label = READING
+                    yield
+                index = await asyncio.to_thread(build_index, path, store, settings, self._options())
         except DocumentRejected as exc:  # password, scanned, too long: the message says which
             log.info("Upload refused: %s", exc)
             self.upload_error = str(exc)

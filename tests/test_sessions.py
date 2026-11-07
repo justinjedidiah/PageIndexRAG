@@ -78,3 +78,14 @@ def test_invalid_tokens_are_rejected(tmp_path, token):
         sessions.ensure(token)
     with pytest.raises(ValueError):
         sessions.delete(token)
+
+
+def test_session_id_hides_the_client_token():
+    from toc_rag.sessions import _TOKEN, session_id_for
+
+    token = "3f2c9a1e-5b7d-4c8e-9f10-123456789abc"
+    session_id = session_id_for(token)
+    assert session_id == session_id_for(token)  # stable, so a reload finds the same folder
+    assert token not in session_id and _TOKEN.match(session_id)
+    assert session_id != session_id_for(token + "x")
+    assert session_id_for("") == ""

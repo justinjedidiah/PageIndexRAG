@@ -5,7 +5,7 @@ import logging
 
 import reflex as rx
 
-from .files import api
+from .files import api, limit_upload_size, rate_limit, security_headers
 from .home import APP_ROUTE, home
 from .runtime import sessions
 from .state import State
@@ -15,7 +15,8 @@ log = logging.getLogger(__name__)
 SWEEP_EVERY_SECONDS = 300
 
 app = rx.App(
-    api_transformer=api,
+    # Applied in order: the size limit, rate limits and headers wrap everything, /_upload and (in production) the page included.
+    api_transformer=[api, limit_upload_size, rate_limit, security_headers],
     stylesheets=["/app.css"],
     head_components=[
         # Tab icon: the header's open book. The SVG switches to a light tile in dark mode; the .ico is for

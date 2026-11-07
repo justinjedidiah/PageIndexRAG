@@ -29,6 +29,11 @@ class Settings:
     max_pdf_pages: int = 300  # checked before reading the text: a small file can hold thousands of pages
     max_doc_tokens: int = 500_000  # of extracted text, any file type: what really costs time to index
     index_workers: int = 6
+    # Abuse limits for the public app, all visitors together unless said otherwise.
+    max_parallel_reads: int = 2  # documents read (parsed) at once; reading a PDF is the CPU-heavy step
+    max_sessions: int = 100  # live sessions holding uploads; caps disk use (each holds up to max_session_docs)
+    uploads_per_ip: int = 20  # uploads one address may send per 10 minutes
+    page_renders_per_ip: int = 300  # PDF page pictures one address may have rendered per 10 minutes
     samples_dir: Path = PROJECT_ROOT / "samples" / "index"
 
     @property
@@ -60,5 +65,9 @@ def get_settings() -> Settings:
         max_pdf_pages=int(os.getenv("TOC_RAG_MAX_PDF_PAGES", "300")),
         max_doc_tokens=int(os.getenv("TOC_RAG_MAX_DOC_TOKENS", "500000")),
         index_workers=int(os.getenv("TOC_RAG_INDEX_WORKERS", "6")),
+        max_parallel_reads=max(1, int(os.getenv("TOC_RAG_MAX_PARALLEL_READS", "2"))),
+        max_sessions=int(os.getenv("TOC_RAG_MAX_SESSIONS", "100")),
+        uploads_per_ip=int(os.getenv("TOC_RAG_UPLOADS_PER_IP", "20")),
+        page_renders_per_ip=int(os.getenv("TOC_RAG_PAGE_RENDERS_PER_IP", "300")),
         samples_dir=Path(os.getenv("TOC_RAG_SAMPLES_DIR", str(PROJECT_ROOT / "samples" / "index"))),
     )
