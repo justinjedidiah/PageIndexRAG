@@ -14,13 +14,16 @@ from ..config import Settings
 from ..providers import LLMConfig
 from ..models import DocumentIndex, FileKind, ImageRecord, IndexedWith, IndexOptions, TocEntry
 from ..storage import Store
-from .blocks import IMAGE_REF, Block, Heading, TocLine
+from .blocks import IMAGE_REF, Block, DocumentRejected, Heading, Paragraph, Table, TocLine
 from .docx_extract import extract_docx
+from .pages import resolve_pages
+from .pdf_cache import read_pdf
 from .estimate import estimate_index
 from .markdown_extract import extract_markdown
 from .options import preset_options
 from .preview import fill_previews
 from .refine import refine_tree
+from .split import estimate_tokens
 from .tree import build_tree
 from .heading_looks import apply_heading_looks, apply_section_looks
 from .typed_toc import apply_typed_toc
@@ -43,13 +46,15 @@ def build_index(
 ) -> DocumentIndex:
     """Extract structure and content. Images are written to the store; nothing is saved as an index yet.
 
-    Without options, the default preset is used.
+    Without options, the default preset is used. Raises DocumentRejected for a document this app
+    will not index (its message is safe to show).
     """
     path = Path(path)
     options = options or preset_options(settings=settings)
-    kind, blocks = _extract(path)
-    # Where the outline comes from, in order: headings, else a typed contents page, else lines formatted like
-    # headings, else nothing (the text is then cut by size). The first that finds one wins.
+    kind, blocks, page_labels, bookmarks = _extract(path, settings)
+    _check_length(blocks, settings.max_doc_tokens)
+    # Where the outline comes from, in order: a PDF's bookmarks or the headings, else a typed contents page,
+    # else lines formatted like headings, else nothing (the text is then cut by size). The first that finds one wins.
     has_headings = any(isinstance(b, Heading) for b in blocks)
     blocks, from_contents_page = apply_typed_toc(blocks)  # a typed contents page: removed, and used if no headings
     from_looks = False
@@ -57,7 +62,7 @@ def build_index(
         blocks, from_looks = apply_heading_looks(blocks)
     headings = [b for b in blocks if isinstance(b, Heading)]
     # The document's own ToC as reference data: its table of contents if it has one, else its headings.
-    source_toc = [TocEntry(title=b.title, level=b.level, page=b.page) for b in blocks if isinstance(b, TocLine)] or [
+    source_toc = bookmarks or [TocEntry(title=b.title, level=b.level, page=b.page) for b in blocks if isinstance(b, TocLine)] or [
         TocEntry(title=b.title, level=b.level) for b in headings
     ] or None
     if options.split_large and (has_headings or from_contents_page):
@@ -67,6 +72,8 @@ def build_index(
 
     root, raw_images = build_tree(blocks, title=path.stem, kind=kind)
     refine_tree(root, options)
+    if page_labels is not None:
+        resolve_pages(root, page_labels)  # page markers become page ranges, and leave the text
     if options.summaries == "preview":
         fill_previews(root, options.preview_sentences)
 
@@ -86,7 +93,7 @@ def build_index(
         kind=kind,
         source_toc=source_toc,
         structure_source=(
-            "typed_toc" if from_contents_page else "formatting" if from_looks else "headings" if headings else "none"
+            "bookmarks" if bookmarks else "typed_toc" if from_contents_page else "formatting" if from_looks else "headings" if headings else "none"
         ),
         root=root,
         images=images,
@@ -197,15 +204,31 @@ def doc_id_for(stem: str, data: bytes) -> str:
     return f"{slug}-{digest}"
 
 
-def _extract(path: Path) -> tuple[FileKind, list[Block]]:
+def _extract(path: Path, settings: Settings) -> tuple[FileKind, list[Block], list[str] | None, list[TocEntry] | None]:
+    """The blocks, plus for a PDF its printed page labels and the bookmarks used as its outline (if any)."""
     suffix = path.suffix.lower()
     if suffix == ".docx":
-        return "docx", extract_docx(path)
+        return "docx", extract_docx(path), None, None
     if suffix in (".md", ".markdown"):
-        return "markdown", extract_markdown(path)
+        return "markdown", extract_markdown(path), None, None
     if suffix == ".pdf":
-        raise NotImplementedError("PDF support is stage 3 (see DESIGN.md).")
+        content = read_pdf(path, settings.max_pdf_pages)
+        return "pdf", content.blocks, content.page_labels, content.outline
     raise ValueError(f"Unsupported file type: {suffix}")
+
+
+def _check_length(blocks: list[Block], max_tokens: int) -> None:
+    """Refuse a document with more text than this app indexes (any file type)."""
+    tokens = sum(
+        estimate_tokens(b.text if isinstance(b, Paragraph) else b.markdown if isinstance(b, Table) else b.title)
+        for b in blocks
+        if isinstance(b, (Paragraph, Table, Heading))
+    )
+    if tokens > max_tokens:
+        words = lambda n: f"{round(n * 0.75, -3):,.0f}"  # noqa: E731 - about 0.75 words per token
+        raise DocumentRejected(
+            f"This document is too long to index here: about {words(tokens)} words, and the limit is about {words(max_tokens)}."
+        )
 
 
 def _assign_image_nodes(index: DocumentIndex) -> None:

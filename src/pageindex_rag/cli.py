@@ -85,6 +85,7 @@ def main(argv: list[str] | None = None) -> None:
 
 
 STRUCTURE_NOTES = {
+    "bookmarks": "from the PDF's bookmarks",
     "headings": "from the document's headings",
     "typed_toc": "from the document's typed contents page (it has no headings)",
     "formatting": "from lines formatted like headings (bold, bigger or numbered; it has no heading styles)",

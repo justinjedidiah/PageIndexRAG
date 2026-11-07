@@ -204,3 +204,12 @@ def test_not_used_when_splitting_is_switched_off(tmp_path, settings):
     options = preset_options("free", roomy, split_large=False)
     index = build_index(big_section_doc(tmp_path), Store(tmp_path / "data"), roomy, options)
     assert index.root.children[0].children == []  # the section is kept whole, as asked
+
+
+def test_rows_of_numbers_are_never_headings():
+    """A chart's axis labels can be bold and recur, but they are data, not titles."""
+    blocks = []
+    for axis in ("25 0.0 40", "20 −0.3 20", "0 20 40 60 80 Growth (%)"):
+        blocks += [bold(axis), text(BODY)]
+    result, found = apply_heading_looks(blocks)
+    assert not found and result == blocks

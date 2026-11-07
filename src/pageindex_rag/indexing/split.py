@@ -9,7 +9,7 @@ import math
 import re
 
 from ..models import Node
-from .blocks import IMAGE_REF
+from .blocks import IMAGE_REF, PAGE_REF, is_anchor_only
 
 SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 TABLE_SEPARATOR = re.compile(r"^\|\s*:?-{3,}")
@@ -65,7 +65,7 @@ def split_text(text: str, max_tokens: int) -> list[str]:
 
 def part_title(base: str, chunk: str, number: int, total: int) -> str:
     """A free title for a generated part: the parent's title and the part's first sentence."""
-    text = IMAGE_REF.sub("", chunk).strip()
+    text = PAGE_REF.sub("", IMAGE_REF.sub("", chunk)).strip()
     if is_table(text):
         header = [cell.strip() for cell in text.split("\n", 1)[0].strip("|").split("|") if cell.strip()]
         first = f"table ({', '.join(header)})" if header else "table"
@@ -113,11 +113,11 @@ def _hard_cut(text: str, max_tokens: int) -> list[str]:
 
 
 def _attach_images(pieces: list[str], max_tokens: int) -> list[str]:
-    """Keep a paragraph that is only image placeholders together with the paragraph after it (or before, at the end)."""
+    """Keep a paragraph that is only image placeholders or page markers with the paragraph after it (or before, at the end)."""
     out: list[str] = []
     pending = ""
     for piece in pieces:
-        if not IMAGE_REF.sub("", piece).strip():
+        if is_anchor_only(piece):
             pending = f"{pending}\n\n{piece}" if pending else piece
             continue
         if pending and estimate_tokens(pending) + estimate_tokens(piece) <= max_tokens:

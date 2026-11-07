@@ -26,6 +26,8 @@ class Settings:
     session_ttl_seconds: int = 2 * 60 * 60
     max_upload_bytes: int = 15 * 1024 * 1024
     max_session_docs: int = 5
+    max_pdf_pages: int = 300  # checked before reading the text: a small file can hold thousands of pages
+    max_doc_tokens: int = 500_000  # of extracted text, any file type: what really costs time to index
     index_workers: int = 6
     samples_dir: Path = PROJECT_ROOT / "samples" / "index"
 
@@ -55,6 +57,8 @@ def get_settings() -> Settings:
         session_ttl_seconds=int(os.getenv("PAGEINDEX_SESSION_TTL_SECONDS", str(2 * 60 * 60))),
         max_upload_bytes=int(os.getenv("PAGEINDEX_MAX_UPLOAD_MB", "15")) * 1024 * 1024,
         max_session_docs=int(os.getenv("PAGEINDEX_MAX_SESSION_DOCS", "5")),
+        max_pdf_pages=int(os.getenv("PAGEINDEX_MAX_PDF_PAGES", "300")),
+        max_doc_tokens=int(os.getenv("PAGEINDEX_MAX_DOC_TOKENS", "500000")),
         index_workers=int(os.getenv("PAGEINDEX_INDEX_WORKERS", "6")),
         samples_dir=Path(os.getenv("PAGEINDEX_SAMPLES_DIR", str(PROJECT_ROOT / "samples" / "index"))),
     )

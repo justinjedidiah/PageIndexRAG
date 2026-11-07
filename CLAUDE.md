@@ -9,7 +9,7 @@ Code-level walkthrough of every module (read `docs/walkthrough/00-start-here.md`
 - Python, Reflex (UI), LangGraph (agent)
 
 ## Layout
-- `src/pageindex_rag/indexing/`: extractors (docx, markdown) -> blocks -> tree -> refine (merge/fold, then `split.py`) -> previews or summarize -> pipeline. `options.py` holds the presets (Free / Budget / Full) over `IndexOptions` in `models.py`
+- `src/pageindex_rag/indexing/`: extractors (docx, pdf, markdown) -> blocks -> tree -> refine (merge/fold, then `split.py`) -> PDF page ranges (`pages.py`) -> previews or summarize -> pipeline. PDF reading uses pypdfium2 + pdfplumber (never PyMuPDF: AGPL). `options.py` holds the presets (Free / Budget / Full) over `IndexOptions` in `models.py`
 - `src/pageindex_rag/agent/`: `Navigator` (one document), `LibraryNavigator` (many documents, step trace) and the LangGraph loop in `graph.py` (`stream_agent` yields steps then the answer)
 - `src/pageindex_rag/models.py`: Node, Location, ImageRecord, DocumentIndex, LibraryEntry
 - `src/pageindex_rag/`: also `sessions.py` (per-visitor folders, 2h expiry sweep), `uploads.py` (pdf/docx validation), `library.py` (samples + session docs), `outline.py`, `errors.py` (provider-neutral safe error messages), `providers.py` (Anthropic / OpenAI / Gemini: model creation and live model listing, no default models; `LLMConfig` = provider + key + models), `llm.py` (thin wrapper)

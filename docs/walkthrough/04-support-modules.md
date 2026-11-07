@@ -297,7 +297,7 @@ def _check_docx(data, max_uncompressed):
 2. A genuine Word file always contains the parts `[Content_Types].xml` and `word/document.xml`. A renamed Excel file, text file or random zip lacks them -> refused.
 3. **Zip-bomb defense.** A "zip bomb" is a tiny file that expands to gigabytes (for example 100 MB of zeros compresses to a few kilobytes). We read the sizes *declared in the archive's directory* (no unpacking needed) and refuse if: there are more than 2,000 parts, the total unpacked size exceeds 100 MB, or any single part expands by more than **200 times** (a normal image or XML file is nowhere near that).
 
-Limits: the PDF check only looks at the first bytes, so a deliberately malformed PDF would still pass this stage and reach whatever reads PDFs later; that PDF reader (not written yet) will need to be careful too.
+Limits: the PDF check only looks at the first bytes, so a deliberately malformed PDF would still pass this stage and reach whatever reads PDFs later; the PDF reader (`indexing/pdf_extract.py`) opens it with pypdfium2 first, and any failure there or in pdfplumber becomes a refused upload, not a crash.
 
 ---
 

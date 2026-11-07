@@ -109,7 +109,7 @@ class DocumentIndex(BaseModel):
     indexed_with: IndexedWith | None = None  # None when no model was used (Free) or for older indexes
     # Where the tree's sections came from: the document's headings, else its typed contents page, else lines
     # formatted like headings, else nothing found (the text is cut by size). None for older indexes.
-    structure_source: Literal["headings", "typed_toc", "formatting", "none"] | None = None
+    structure_source: Literal["bookmarks", "headings", "typed_toc", "formatting", "none"] | None = None
 
     def node_map(self) -> dict[str, Node]:
         return {node.id: node for node in self.root.walk()}

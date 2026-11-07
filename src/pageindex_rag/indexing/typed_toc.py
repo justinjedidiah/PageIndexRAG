@@ -75,7 +75,7 @@ def apply_typed_toc(blocks: list[Block]) -> tuple[list[Block], bool]:
         if start <= i < end:
             continue  # the contents page itself: not text
         if i in promote:
-            result.append(Heading(promote[i], block.text))
+            result.append(Heading(promote[i], block.text, page=block.page))
         else:
             result.append(block)
     return result, not has_headings

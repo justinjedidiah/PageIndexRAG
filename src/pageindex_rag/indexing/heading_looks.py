@@ -115,7 +115,7 @@ def _promote(blocks: list[Block], levels: dict[int, int]) -> list[Block]:
         return blocks
     result = list(blocks)
     for i, level in levels.items():
-        result[i] = Heading(level, blocks[i].text.strip())
+        result[i] = Heading(level, blocks[i].text.strip(), page=blocks[i].page)
     return result
 
 
@@ -134,6 +134,8 @@ def _candidate(block: Paragraph, normal: float | None) -> _Look | None:
         return None
     if _SENTENCE_END.search(text) or _CAPTION.match(text) or block.listed:
         return None
+    if not _mostly_words(text):  # "25 0.0 40": a chart's axis or a row of figures, not a title
+        return None
     letters = [c for c in text if c.isalpha()]
     caps = len(text.split()) >= 2 and bool(letters) and all(c.isupper() for c in letters)
     bigger = normal is not None and block.size is not None and block.size >= normal * BIGGER
@@ -147,6 +149,14 @@ def _candidate(block: Paragraph, normal: float | None) -> _Look | None:
         question=text.endswith("?"),
         numbered_only=numbered and not (block.bold or bigger or caps),
     )
+
+
+def _mostly_words(text: str) -> bool:
+    """At least one real word, and no more number-like tokens than words: titles are words, data is numbers."""
+    tokens = text.split()
+    words = sum(1 for token in tokens if sum(c.isalpha() for c in token) >= 2)
+    numbers = sum(1 for token in tokens if not any(c.isalpha() for c in token) and any(c.isdigit() for c in token))
+    return words >= 1 and numbers <= words
 
 
 def _recurring(blocks: list[Block], looks: dict[int, _Look], needed: int) -> list[int]:

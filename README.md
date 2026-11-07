@@ -2,13 +2,13 @@
 
 **Retrieval without vectors.** An AI agent answers questions about your documents by navigating their table of contents, the way a person would: open the document, scan the outline, step into the right section, read it, and cite it. No chunking, no embeddings, no similarity search.
 
-Upload a Word document (or try the sample library), bring your own API key for **Anthropic, OpenAI or Google Gemini**, and chat. Every answer shows the path the agent took through the documents and links each claim to the section it came from.
+Upload a Word document or a PDF (or try the sample library), bring your own API key for **Anthropic, OpenAI or Google Gemini**, and chat. Every answer shows the path the agent took through the documents and links each claim to the section it came from.
 
 <!-- Screenshot: add docs/images/screenshot.png (a real answer with its navigation path and citations) and uncomment:
 ![An answer with the agent's navigation path and citations](docs/images/screenshot.png)
 -->
 
-> **Status:** works end to end locally. Word (.docx) documents are supported; PDF support is next. A public demo is planned (Railway).
+> **Status:** works end to end locally. Word (.docx) and text PDFs are supported (PDF: bookmarks, page-number citations, running headers and footers removed; tables, images and charts next). A public demo is planned (Railway).
 
 ## How it works
 
@@ -78,7 +78,7 @@ The end-to-end run starts the app with a stand-in model (`tests/fake_llm.py`), d
 
 ```
 src/pageindex_rag/
-  indexing/     Word/Markdown -> section tree -> refine (split, merge) -> summaries
+  indexing/     Word/PDF/Markdown -> section tree -> refine (split, merge) -> summaries
   agent/        the navigation tools and the LangGraph agent loop
   providers.py  Anthropic, OpenAI and Gemini: models, model lists
 pageindex_app/  the Reflex web app
@@ -93,7 +93,7 @@ samples/        the sample documents and their indexes
 
 ## Roadmap
 
-- PDF documents (bookmarks, printed contents pages, layout), and generated structure for documents without headings
+- Better PDF reading (tables, images, text inside charts, a page view), and generated structure for documents without headings
 - A public demo
 - An evaluation against a vector-RAG baseline
 

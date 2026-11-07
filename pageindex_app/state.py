@@ -18,6 +18,7 @@ from pageindex_rag.errors import friendly_error
 from pageindex_rag.indexing import (
     DEFAULT_PRESET,
     PRESET_NAMES,
+    DocumentRejected,
     Estimate,
     IndexingCancelled,
     build_index,
@@ -26,6 +27,7 @@ from pageindex_rag.indexing import (
 )
 from pageindex_rag.indexing.estimate import count_describable_images
 from pageindex_rag.indexing.options import PRESET_DESCRIPTIONS, PRESET_LABELS, matching_preset, preset_options
+from pageindex_rag.indexing.pdf_cache import forget as forget_saved_read
 from pageindex_rag.indexing.pipeline import doc_id_for
 from pageindex_rag.library import SAMPLE_SCOPE, Library
 from pageindex_rag.providers import PROVIDER_IDS, PROVIDERS, LLMConfig, list_models
@@ -281,6 +283,7 @@ class State(rx.State):
             if not store.has_index(self._pending_id):
                 store.delete_document(self._pending_id)
             (sessions.uploads_dir(token) / self._pending_file).unlink(missing_ok=True)
+            forget_saved_read(sessions.uploads_dir(token) / self._pending_file)
             pending_path(token).unlink(missing_ok=True)
         self._pending_id = ""
         self._pending_file = ""
@@ -511,9 +514,6 @@ class State(rx.State):
         except UploadError as exc:
             self.upload_error = str(exc)
             return
-        if kind == "pdf":
-            self.upload_error = "PDF indexing is not available yet. Word (.docx) files work."
-            return
 
         # Checked before anything is written, so a refused upload does not start a session (and its clock).
         doc_id = doc_id_for(Path(name).stem, data)
@@ -529,6 +529,7 @@ class State(rx.State):
         self.building = True
         yield
         token = self._token()
+        path: Path | None = None
         try:
             sessions.ensure(token)
             directory = sessions.uploads_dir(token)
@@ -537,9 +538,19 @@ class State(rx.State):
             path.write_bytes(data)
             store = sessions.store(token)
             index = await asyncio.to_thread(build_index, path, store, settings, self._options())
+        except DocumentRejected as exc:  # password, scanned, too long: the message says which
+            log.info("Upload refused: %s", exc)
+            self.upload_error = str(exc)
+            if path:
+                path.unlink(missing_ok=True)
+                forget_saved_read(path)
+            return
         except Exception:
             log.exception("Reading an uploaded document failed")
             self.upload_error = "Could not read that document. It may be damaged or use unsupported features."
+            if path:
+                path.unlink(missing_ok=True)
+                forget_saved_read(path)
             return
         finally:
             self.building = False
@@ -721,6 +732,7 @@ class State(rx.State):
                 self._clear_pending(delete_files=True)
             else:
                 pending_path(token).unlink(missing_ok=True)
+                forget_saved_read(source)  # indexed: options can no longer change, so the saved read is done with
                 self._clear_pending(delete_files=False)
             self._refresh()
         if not error:
@@ -881,6 +893,7 @@ def _estimate_key(options: IndexOptions) -> str:
 
 # Shown above a document's outline, so a flat outline explains itself.
 STRUCTURE_NOTES = {
+    "bookmarks": "Outline from the PDF's bookmarks.",
     "headings": "Outline from the document's headings.",
     "typed_toc": "Outline from the document's contents page (it has no headings).",
     "formatting": "Outline from lines formatted like headings (it has no heading styles).",

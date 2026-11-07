@@ -156,7 +156,7 @@ Visitor clicks a citation
 | Change how sections are summarized | `summarize.py` `_prompt` (02) |
 | Change what the agent is told | `graph.py` `SYSTEM_PROMPT` (03) |
 | Change how many steps/parallel calls/limits | `config.py` (04) and the env table there |
-| Support PDF | a new `pdf_extract.py` producing `blocks` (02), and the `NotImplementedError` in `pipeline._extract` |
+| Improve PDF reading | `indexing/pdf_extract.py` (02): lines to paragraphs, bookmarks; page ranges in `indexing/pages.py` |
 | Change the page's look | `views.py`, `rxconfig.py`, `assets/app.css` (05) |
 | Change what a button does | the handler in `state.py` (05) |
 | Change the session lifetime | `PAGEINDEX_SESSION_TTL_SECONDS` (04) |

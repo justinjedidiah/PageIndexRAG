@@ -1,6 +1,6 @@
 # 02. Indexing: from an uploaded file to a searchable tree
 
-Files covered: everything in `src/pageindex_rag/indexing/` (`docx_extract.py`, `markdown_extract.py`, `tree.py`, `refine.py`, `split.py`, `preview.py`, `options.py`, `estimate.py`, `summarize.py`, `pipeline.py`, `blocks.py` was in file 01).
+Files covered: everything in `src/pageindex_rag/indexing/` (`docx_extract.py`, `pdf_extract.py`, `markdown_extract.py`, `tree.py`, `pages.py`, `refine.py`, `split.py`, `preview.py`, `options.py`, `estimate.py`, `summarize.py`, `pipeline.py`, `blocks.py` was in file 01).
 
 **Indexing** means turning a document into the tree of sections described in file 01, with a summary on every section. It happens once per document. Asking questions later only reads the result.
 
@@ -81,7 +81,7 @@ A trusted contents page is removed from the text and its entries kept as `TocLin
 
 The last try, only when a document has no headings and no trustworthy contents page: many people make headings by hand, bold or bigger or numbered. For this the Word reader also records how each paragraph looks: whether all its text is bold, the font size most of it uses (from the text's own formatting, else its character style, else the paragraph's style chain, else the document's default), and whether it is a Word list item. `apply_heading_looks`:
 
-1. **Candidates:** short lines (12 words, 100 characters) that do not end like a sentence (a question mark or colon is fine) and stand out: all bold, at least 15% bigger than the document's normal size (the size most of its text uses), numbered like a section ("1.2", "Chapter 3", "A."), or in capitals. Captions ("Figure 3") and Word list items are not candidates: Word's automatic numbering is rarely a heading.
+1. **Candidates:** short lines (12 words, 100 characters), mostly words rather than numbers (at least one real word and no more number-like tokens than words, so a chart's axis labels never qualify), that do not end like a sentence (a question mark or colon is fine) and stand out: all bold, at least 15% bigger than the document's normal size (the size most of its text uses), numbered like a section ("1.2", "Chapter 3", "A."), or in capitals. Captions ("Figure 3") and Word list items are not candidates: Word's automatic numbering is rarely a heading.
 2. **Group them by look**: size, bold, capitals, question or not.
 3. **Keep only looks that recur**: at least 3 lines (2 in a document under 30 paragraphs) with text between them. More than 3 lines of one look in a row with nothing between are a list (lines numbered at different depths, like "1 Setup" then "1.1 Tools", may follow each other: that is nesting). Headings are a pattern that repeats through a document; a pull quote, a warning or one big title at the top is not, and stays text. This is also what makes bold questions work: spread through the document they are an FAQ's sections, once or twice they are quotes.
 4. **Give up** if the kept lines hold more than 30% of the text, or are more than two thirds of the paragraphs: the document just uses a lot of bold. Measured by text rather than by paragraphs because in an FAQ (a question, then a one-paragraph answer) half the paragraphs are headings, yet they are a small part of the text.
@@ -131,6 +131,25 @@ Rows of cell text; pad shorter rows to the widest row; the first row is the head
 ```
 
 Why Markdown? A table is just text to the AI, and Markdown keeps rows and columns readable to both Claude and the browser (which renders it as a real table).
+
+### `pdf_extract.py`
+
+A PDF has no paragraphs, only text drawn at positions on pages. Two libraries with permissive licences read it (PyMuPDF was ruled out for its AGPL licence):
+
+- **pypdfium2** (Chrome's PDF engine) opens the file first. A password-protected file fails here and becomes a `DocumentRejected` ("This PDF is password-protected..."). It also gives the page count (checked against `max_pdf_pages`, 300 by default, *before* any text is read: a small file can hold thousands of text pages), each page's **printed label** (`get_page_label`: "iv", "12"), and the **bookmarks** (`get_toc`: level, title, target page and the point on it).
+- **pdfplumber** gives each page's lines with every character's font name and size (`extract_text_lines(return_chars=True)`).
+
+`_lines` turns each line into `_Line(text, top, bottom, x0, size, bold)`: size is the median character size; bold means every character's font name says Bold, Black, Heavy or Semibold. `_paragraphs` groups lines: a new paragraph starts after a gap wider than half the line height, where the line moves up the page (a new column), or where size or boldness changes. `_join_lines` puts a word hyphenated at the line end back together ("main-" + "tenance"). Each paragraph becomes a `Paragraph(text, indent=x0, bold, size, page)`, the same shape as a Word paragraph, so the typed contents page and heading-look detectors work on PDFs unchanged.
+
+Before lines become paragraphs, `_drop_running_lines` removes **running headers and footers**: a line in the top or bottom tenth of the page goes when its text, with numbers removed, recurs on at least 3 pages and a fifth of them (so "10 Annual Report 2026" and "Annual Report 2026 11" count as one footer), or when it is only a page number ("- 4 -", "Page 4 of 9"). Without this a footer reads as a recurring bold line and becomes a run of fake sub-headings.
+
+`_check_text_layer` refuses a PDF where no page, or fewer than half the pages, has 20 characters of text: those are scans, and there is no OCR.
+
+**Bookmarks as the outline.** `_believable` keeps bookmarks with a title and a target page, dropping junk like "Page 3", "12", "Untitled"; they are used only if at least 2 remain and they are at least half of all bookmarks. `_page_blocks` places each bookmark's `Heading` on its page: at the first paragraph (at or below the point the bookmark targets) whose text starts with the bookmark's title (or up to 3 paragraphs in a row that together do, since a title like "Box A: Global supply chains" is often printed as a small "Box A" over a bigger subtitle), which it replaces (a heading run into its first line, "Cleaning. Use a soft brush", is split into heading and paragraph). If no line carries the title, the heading is inserted where the bookmark points. The used bookmarks also become `source_toc`, with printed page labels, and `structure_source` is `"bookmarks"`.
+
+`pdf_cache.read_pdf` saves what was read as `<file>.read.json` next to the PDF: reading is the slow part (about 0.07 s a page, 21 s for 300 dense pages), and every change of a structure option, and "Index it" itself, rebuild the tree from the same file. The saved read sits in the visitor's own uploads folder, so it is deleted with the session; nothing is kept in shared memory. It is used only for the file beside it and only if the SHA-256 of that file's bytes (and the page limit and a format number) match the ones saved with it, so a changed file is always read again, and a damaged saved read is ignored. The app deletes it once the document is indexed, cancelled or refused (`pdf_cache.forget`).
+
+Not handled yet: text inside charts (axis labels and legends come through as text), multi-column order beyond "a new column starts a paragraph", tables (their rows come through as lines of text) and images.
 
 ### `markdown_extract.py` (developer use only)
 
@@ -202,6 +221,10 @@ return root, images
 Finally each node's text is its pieces joined by blank lines. It returns the tree plus the list of images with their ids (the raw image bytes are saved later).
 
 ---
+
+### Pages in PDF sections (`pages.py`)
+
+Each PDF block carries the page it is on. `build_tree` writes a page marker, `[page:N]`, into the text wherever the page changes (including just before a heading that opens a new page). The markers travel with the text through merge, fold and split, which only move text around in document order; the splitter keeps a marker-only paragraph with its neighbour, like an image placeholder. After refining, `resolve_pages` walks the tree in document order, carrying the current page, and sets each node's `pdf_page_start`/`pdf_page_end` and printed labels: a section starts at its first marker or first text, and ends where its last text, or its last subsection, ends. The markers are then removed, before previews, summaries or the agent see the text. `Location.label()` shows the printed numbers: "p. 3", "pp. 1-2".
 
 ## Stage 1, step C: refine the tree (`refine.py`, `split.py`, `preview.py`)
 
@@ -573,7 +596,7 @@ Used by the command line, the sample builder and the tests. The web page calls t
 ## Things that are not built, or limited
 
 1. **A Word file without headings (no outline levels) gets no real structure.** A typed contents page or lines formatted like headings are used if it has them (see above); only a document with neither gets no real structure. All its text lands under the root and is only cut by size into balanced parts (one level, titled by their first sentence). The design intends to have Claude *generate* a table of contents for such files, and optionally pick topic boundaries when splitting; **neither is implemented yet**. Both are planned together with PDF.
-2. **PDF reading does not exist** (`NotImplementedError`, see above).
+2. **PDF reading is basic** (see `pdf_extract.py`): no header/footer removal, tables or images yet, and no page view in the source panel.
 3. Word features that are ignored: headers and footers, footnotes, text boxes, nested tables, content controls inside table cells. Merged table cells may repeat their text.
 4. The token estimate is a rough rule (characters / 4).
 5. Splitting is by size, not by topic: a cut can fall between two sentences that belong together.

@@ -229,7 +229,7 @@ finally:
 1. Refuse if something is already in progress, or if no file was chosen. No key is needed to upload: reading the file and building the tree are free, and the Free preset never uses a key.
 2. `name = safe_filename(upload.filename ...)` cleans the name. `data = await upload.read(settings.max_upload_bytes + 1)` reads the file **but never more than the limit plus one byte**, so an oversized upload cannot fill the server's memory; the `+1` lets the validator see "too big".
 3. `validate_upload(...)` (file 04). On refusal it shows the message.
-4. A PDF is refused for now ("PDF indexing is not available yet").
+4. A document the indexer refuses (`DocumentRejected`: a password-protected or scanned PDF, too many pages, too much text) shows the refusal's own message, and the saved upload is deleted. Any other failure shows a generic "Could not read that document".
 5. `doc_id_for(name, data)` works out the document's id from its name and a fingerprint of its content, **before anything is written**, so a refused upload never starts a session (or its 2-hour clock):
    - one of the **samples**: refused ("That's one of the sample documents, already in the library"); samples are read-only.
    - already in **your** library: allowed. Indexing it again (perhaps with another preset or model) **replaces** that version; the pending card says so (`replace_note`, below).
@@ -396,6 +396,7 @@ Renders text as Markdown (answers, section text) with table borders and images t
 - A scrolling area containing: `empty_chat()` (instructions, and the four sample-question cards) **only while there are no messages**; the messages (`rx.foreach(State.messages, message_view)`); and an invisible box with `id="chat-end"` that the scroll script targets.
 - `message_view`: `rx.cond(message.role == "user", <bubble on the right>, assistant_message(message))`.
 - `live_answer` is the answer being written, shown under the messages while `thinking`: its steps so far, then a spinner and "Working..." until text arrives, then the text as it streams.
+- `prose` renders Markdown with maths and raw HTML switched off (`use_math=False, use_katex=False, use_raw=False`): "$10 billion ... $34 billion" is money, not a formula, and document text and model answers are untrusted, so HTML in them shows as text.
 - `assistant_message` (a finished answer) stacks, in order: the steps (`rx.foreach(message.steps, step_line)`, only when there are any): each is the model's one-line note at the same size as the answer, then a small grey line saying what it did, so the message reads like a conversation; the answer (`prose`, the same look whether or not it was found); the images; and the **citation chips** (each one `on_click=State.open_source(citation.ref)`).
 - `composer`: a form with the text input named `question`, sending `State.ask` on submit and clearing itself (`reset_on_submit`). The input and the arrow button are disabled when `can_chat` is false.
 
@@ -425,6 +426,6 @@ rx.grid(
 2. **No rate limiting.** One visitor could upload up to 5 documents of 15 MB each repeatedly, using the server's CPU and disk (they pay Anthropic, but the server cost is yours). A per-address limit is not built.
 3. **The key is typed into the page and travels to the server once.** It is not stored or logged, but on a public site this needs **HTTPS**, otherwise it crosses the network readable. (Reflex's default memory state is used; if you ever configure Redis for state, the key would be stored there too.)
 4. **Chat history is not saved anywhere**: closing the tab loses it.
-5. **PDF uploads** are accepted by the drop zone but refused with a message (file 02).
+5. **PDF pages are not shown**: the source panel shows a PDF section's text and printed page numbers, not the page itself (planned).
 6. **Never run against a real key from the web page yet**: the browser test (file 06) uses the offline fake model.
 7. The page loads a font from Google (see above).

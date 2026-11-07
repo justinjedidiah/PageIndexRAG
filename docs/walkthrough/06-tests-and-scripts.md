@@ -87,6 +87,7 @@ A fixture giving tests a `Settings` that writes into the temp folder and uses a 
 | `test_library.py` | Samples + session merging, samples first, a visitor with no live session seeing only samples, deleting, and the image-path safety rules (traversal attempts, non-images, odd ids all return nothing). |
 | `test_outline.py` | The outline rows and `node_markdown` (images inlined, alt text cleaned, unknown placeholders vanish), and `describe_duration`. |
 | `test_sessions.py` | Creation and expiry using a fake clock, restarting an expired session, the sweep removing only expired ones, deletion, and invalid tokens (including `../`) being rejected. |
+| `test_pdf.py` | PDFs drawn in code with reportlab: lines joined into paragraphs, hyphenated words rejoined, bookmarks as the outline (placed at their title, or where they point; junk ones ignored), page ranges with printed labels (roman front matter), split parts with their own pages, no page marker left in any text; refusals: password, scanned, too many pages, too much text (for Word too). |
 | `test_uploads.py` | Real docx/pdf accepted; `.zip` and other types refused; files lying about their content refused; empty/oversized refused; a zip bomb refused; `safe_filename` on hostile names. |
 
 ### `test_agent.py`: testing an AI agent without an AI
@@ -182,7 +183,7 @@ The indexing step uses **your key** (the real model) unless the fake factory var
 These came up while writing this walkthrough. None break anything today; they are the places that are not as thorough as they should be:
 
 1. **Documents with no heading styles get no real structure** (file 02): the "generate a table of contents with AI" idea is not built.
-2. **PDF reading does not exist.**
+2. **PDF reading is basic** (no running headers, tables or images yet).
 3. **Two constants must match but nothing enforces it:** the 12,000-character cut-off in `estimate.py` and `summarize.py`.
 4. **A few leftovers:** the unused `OPEN_FAIL_KEY` in `fake_llm.py`; the dictionary values of `ALLOWED` in `uploads.py` are never read (only the keys are); the no-op assertion and debug text in `run_e2e.py`.
 5. **Two things named `Image`:** the `Image` block dataclass in `blocks.py` and Pillow's `Image` (used in `summarize.py`) share a name; they never meet in one file today, but it is confusing.

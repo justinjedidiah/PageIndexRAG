@@ -227,7 +227,11 @@ def upload_form() -> rx.Component:
                 rx.vstack(
                     rx.icon("upload", size=22),
                     rx.text("Drop a .docx or .pdf here, or click to choose", size="2", text_align="center"),
-                    rx.text(f"Up to {settings.max_upload_bytes // (1024 * 1024)} MB. ZIP files are not accepted.", **MUTED),
+                    rx.text(
+                        f"Up to {settings.max_upload_bytes // (1024 * 1024)} MB, and {settings.max_pdf_pages} pages for a PDF. "
+                        "Scanned PDFs and ZIP files are not accepted.",
+                        **MUTED,
+                    ),
                     align="center",
                     spacing="1",
                 ),

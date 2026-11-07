@@ -26,6 +26,7 @@ from docx import Document  # noqa: E402
 from playwright.sync_api import expect, sync_playwright  # noqa: E402
 
 from tests.conftest import make_noisy_png  # noqa: E402
+from tests.test_pdf import BODY as PDF_BODY, make_pdf  # noqa: E402
 
 FRONTEND, BACKEND = "http://localhost:3000", "http://localhost:8000"
 KEY = "sk-ant-e2e-secret-key-do-not-store-123"
@@ -252,6 +253,42 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
 
         step("its outline shows parts titled by their first sentence", browse_free, "02c-free-outline.png")
         step("the outline closes", dismiss_dialog)
+
+        def pdf_with_bookmarks() -> None:
+            brochure = work / "Solar Brochure.pdf"
+            make_pdf(brochure, [
+                [("p", "Solar Brochure. " + PDF_BODY)],
+                [("h", "Choosing panels"), ("p", PDF_BODY * 12)],
+                [("h", "Looking after them"), ("p", PDF_BODY * 12)],
+            ])
+            page.set_input_files("input[type=file]", str(brochure))
+            expect(page.locator("[data-preset=free]")).to_be_visible(timeout=30000)
+            page.locator("[data-preset=free]").click()
+            expect(page.locator("#pending-detail")).to_contain_text("No model calls", timeout=10000)
+            page.get_by_role("button", name="Index it").click()
+            expect(page.get_by_role("button", name="Index it")).to_have_count(0, timeout=60000)
+            row = page.get_by_text("Solar Brochure", exact=True).locator("xpath=ancestor::div[.//button[@title='Delete this document']][1]")
+            expect(row).to_be_visible(timeout=15000)
+            row.get_by_role("button", name="Browse").click()
+            outline = page.locator("#source-panel")
+            expect(page.locator("#browse-structure")).to_have_text("Outline from the PDF's bookmarks.", timeout=10000)
+            outline.get_by_role("button").filter(has=page.get_by_text("Looking after them", exact=True)).click()
+            expect(outline.get_by_text("Solar Brochure · p. 3")).to_be_visible(timeout=10000)  # cited by page
+
+        step("a PDF with bookmarks is indexed, its sections cited by page", pdf_with_bookmarks, "02d-pdf.png")
+        step("the PDF's section closes", dismiss_dialog)
+
+        def pdf_refusals() -> None:
+            locked = work / "Locked.pdf"
+            make_pdf(locked, [[("p", PDF_BODY)]], encrypt="secret")
+            page.set_input_files("input[type=file]", str(locked))
+            expect(page.get_by_text("This PDF is password-protected")).to_be_visible(timeout=20000)
+            # Then remove the brochure again, so the rest of the run sees the library it expects.
+            row = page.get_by_text("Solar Brochure", exact=True).locator("xpath=ancestor::div[.//button[@title='Delete this document']][1]")
+            row.locator("button[title='Delete this document']").click()
+            expect(page.get_by_text("Solar Brochure", exact=True)).to_have_count(0, timeout=15000)
+
+        step("a password-protected PDF is refused with a reason", pdf_refusals)
 
         def pick(trigger, option: str) -> None:
             """Choose from a Radix dropdown. It ignores a click that lands just after it opens (so the opening
