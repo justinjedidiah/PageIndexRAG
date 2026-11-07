@@ -389,6 +389,7 @@ Renders text as Markdown (answers, section text) with table borders and images t
 - `key_card`: a form (`rx.form`) whose submit sends the `save_key` event; a password-type input; shows a green "Key set" badge and a Remove button once a key is set; shows `State.key_error` in red; and the privacy sentence ("stays in this session's server memory only...").
 - `library_card`: lists `State.docs` through `doc_row` (title, a "sample" badge, a Browse button, and a trash button only for non-samples: `rx.cond(~doc.sample, ...)`), plus the `session_note`.
 - `upload_card`: a three-way switch on state: `indexing` -> `indexing_view` (progress bar and "N of M: label"); else `has_pending` -> `pending_view` (the cost sentence with **Index it** / **Cancel**); else `upload_form`. The upload form is `rx.upload`: a drop zone limited to the accepted types, one file and the size limit, open without a key. Its `on_drop` sends `handle_upload` as soon as a file is chosen or dropped, so there is no separate Upload button; while the file is read it shows a spinner and refuses another file. A file of the wrong type or size never reaches the server: the drop zone rejects it and Reflex shows a toast.
+- `agent_settings_card`: collapsed by default (`show_agent_settings`, toggled by clicking its title row). Holds the "Outline levels per look" select (`listing_depth`, 1-3), passed to `stream_agent` with each question: how many outline levels one agent listing shows.
 
 ### Middle column (`chat_panel`)
 

@@ -454,6 +454,53 @@ def upload_card() -> rx.Component:
     )
 
 
+def agent_settings_card() -> rx.Component:
+    """How the chat agent reads the library. Collapsed by default: the defaults are fine for most visitors."""
+    return rx.card(
+        rx.vstack(
+            rx.hstack(
+                rx.text("Agent settings", size="2", weight="bold"),
+                rx.spacer(),
+                rx.cond(State.show_agent_settings, rx.icon("chevron-down", size=16), rx.icon("chevron-right", size=16)),
+                on_click=State.toggle_agent_settings,
+                cursor="pointer",
+                align="center",
+                width="100%",
+                id="agent-settings-toggle",
+            ),
+            rx.cond(
+                State.show_agent_settings,
+                rx.vstack(
+                    rx.hstack(
+                        rx.text("Outline levels per look", size="2"),
+                        rx.select(
+                            ["1", "2", "3"],
+                            value=State.listing_depth,
+                            on_change=State.set_listing_depth,
+                            size="1",
+                            id="listing-depth",
+                        ),
+                        align="center",
+                        justify="between",
+                        width="100%",
+                    ),
+                    rx.text(
+                        "How many levels of a document's outline the agent sees each time it looks. "
+                        "More levels means fewer steps to reach a section, but longer listings.",
+                        **MUTED,
+                    ),
+                    spacing="2",
+                    width="100%",
+                ),
+            ),
+            spacing="2",
+            align="start",
+            width="100%",
+        ),
+        **CARD,
+    )
+
+
 # ---- chat ----
 
 
@@ -659,22 +706,6 @@ def chat_panel() -> rx.Component:
         ),
         rx.box(
             composer(),
-            rx.hstack(
-                rx.text("Outline levels per look:", **MUTED),
-                rx.select(
-                    ["1", "2", "3"],
-                    value=State.listing_depth,
-                    on_change=State.set_listing_depth,
-                    size="1",
-                    variant="ghost",
-                ),
-                rx.text("More levels means fewer agent steps to reach a section.", **MUTED),
-                align="center",
-                spacing="2",
-                padding_top="0.3em",
-                padding_left="0.9em",
-                wrap="wrap",
-            ),
             padding="0.5em 1.25em 1.25em",
             width="100%",
         ),
@@ -844,6 +875,7 @@ def left_column() -> rx.Component:
         key_card(),
         library_card(),
         upload_card(),
+        agent_settings_card(),
         spacing="3",
         align="stretch",
         padding="1em",

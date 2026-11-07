@@ -400,6 +400,19 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
 
         step("everything clickable shows a hand cursor", clickables_show_a_hand)
 
+        def agent_settings() -> None:
+            # Collapsed at first; opening it shows the listing depth, which can be changed.
+            expect(page.locator("#listing-depth")).to_have_count(0)
+            page.locator("#agent-settings-toggle").click()
+            depth = page.locator("#listing-depth")
+            expect(depth).to_contain_text("2", timeout=10000)
+            pick(depth, "3")
+            expect(depth).to_contain_text("3", timeout=10000)
+            pick(depth, "2")
+            expect(depth).to_contain_text("2", timeout=10000)
+
+        step("agent settings open and change the listing depth", agent_settings)
+
         def index_and_confirm() -> None:
             """Index it with a paid preset: a confirmation shows the cost first."""
             page.get_by_role("button", name="Index it").click()

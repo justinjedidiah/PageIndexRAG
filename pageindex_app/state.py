@@ -165,6 +165,7 @@ class State(rx.State):
     # so choosing a preset or a summary option never touches the disk. Keyed by _estimate_key.
     _estimates: dict[str, dict[str, int]] = {}
     show_advanced: bool = False
+    show_agent_settings: bool = False
     opt_split: bool = True
     opt_max_leaf: str = str(settings.max_leaf_tokens)
     opt_small: str = "merge"
@@ -200,7 +201,7 @@ class State(rx.State):
     def chat_hint(self) -> str:
         """What is missing before chatting, or "" when nothing is."""
         if not self.key_set:
-            return "Add your API key to start chatting. You can browse the samples without one."
+            return "Add your API key to start chatting. Without one you can still browse the library."
         if not self.agent_model:
             return "Choose a model for chat (under your API key) to start chatting."
         return ""
@@ -570,6 +571,10 @@ class State(rx.State):
     @rx.event
     def toggle_advanced(self):
         self.show_advanced = not self.show_advanced
+
+    @rx.event
+    def toggle_agent_settings(self):
+        self.show_agent_settings = not self.show_agent_settings
 
     @rx.event
     async def set_opt_split(self, value: bool):
