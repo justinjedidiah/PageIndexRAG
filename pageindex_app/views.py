@@ -699,6 +699,7 @@ def chat_panel() -> rx.Component:
                 spacing="5",
                 width="100%",
                 padding="1.25em 1.25em 0.5em",
+                custom_attrs={"data-zoom-area": ""},  # pictures here enlarge on click (ZOOM_SCRIPT)
             ),
             type="auto",
             scrollbars="vertical",
@@ -805,6 +806,7 @@ def source_panel() -> rx.Component:
     return rx.box(
         rx.cond(State.source_open, source_view(), rx.cond(State.browse_open, browse_view(), placeholder)),
         id="source-panel",
+        custom_attrs={"data-zoom-area": ""},  # pictures here enlarge on click (ZOOM_SCRIPT)
         padding=rx.cond(State.source_open | State.browse_open, "1.25em", "0"),
         overflow_y="auto",
         min_height="0",

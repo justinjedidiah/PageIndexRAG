@@ -10,6 +10,7 @@ installed and the dev extras (playwright). Not collected by pytest: it is slow a
 import contextlib
 import io
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -372,6 +373,30 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
             page.wait_for_function("() => [...document.images].some(i => i.alt.includes('bar chart') && i.naturalWidth > 0)", timeout=15000)
 
         step("an image question shows the picture inline", ask_image, "06-image.png")
+
+        def enlarge_image() -> None:
+            page.locator("[data-zoom-area] img[alt*='bar chart']").first.click()
+            overlay = page.locator("#image-zoom")
+            expect(overlay).to_be_visible(timeout=5000)
+            expect(overlay.locator("img")).to_have_attribute("alt", re.compile("bar chart"))
+            expect(overlay.locator(".image-zoom-caption")).to_contain_text("bar chart")
+            page.wait_for_timeout(300)
+            page.screenshot(path=str(out / "06b-enlarged.png"))
+            close = overlay.get_by_role("button", name="Close")
+            box, icon = close.bounding_box(), close.locator("svg").bounding_box()
+            centre_off = abs((icon["x"] + icon["width"] / 2) - (box["x"] + box["width"] / 2)) + abs(
+                (icon["y"] + icon["height"] / 2) - (box["y"] + box["height"] / 2)
+            )
+            assert centre_off < 1, f"the close icon is {centre_off:.1f}px off centre"
+            page.keyboard.press("Escape")
+            expect(overlay).to_have_count(0)
+            for closing in (lambda: close.click(), lambda: overlay.locator("img").click()):  # the button, or anywhere
+                page.locator("[data-zoom-area] img[alt*='bar chart']").first.click()
+                expect(overlay).to_be_visible(timeout=5000)
+                closing()
+                expect(overlay).to_have_count(0)
+
+        step("a picture enlarges on click, and closes", enlarge_image)
 
         def scrolled_up_stays_up() -> None:
             viewport = "document.getElementById('chat-end').closest('[data-radix-scroll-area-viewport]')"

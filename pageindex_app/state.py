@@ -101,6 +101,69 @@ COUNTDOWN_SCRIPT = """
 """
 
 
+# Click a picture in the chat or the source panel (anything inside [data-zoom-area]) to see it large, over the
+# page. Plain browser code: the pictures in a source section are rendered from Markdown, so they have no Reflex
+# events, and opening a picture needs no trip to the server. The popup fits the picture to the screen; Escape, the
+# close button or a click anywhere closes it.
+ZOOM_SCRIPT = """
+(function () {
+  if (window.__imageZoom) { return; }
+  window.__imageZoom = true;
+  var opener = null;
+  function close() {
+    var overlay = document.getElementById('image-zoom');
+    if (overlay) { overlay.remove(); }
+    document.removeEventListener('keydown', onKey);
+    if (opener) { opener.focus && opener.focus(); opener = null; }
+  }
+  function onKey(event) { if (event.key === 'Escape') { close(); } }
+  function zoomable(target) {
+    var img = target && target.closest ? target.closest('[data-zoom-area] img') : null;
+    return img && !img.closest('#image-zoom') ? img : null;
+  }
+  document.addEventListener('mouseover', function (event) {
+    var img = zoomable(event.target);
+    if (img && !img.title) { img.title = 'Click to enlarge'; }
+  });
+  document.addEventListener('click', function (event) {
+    var img = zoomable(event.target);
+    if (!img) { return; }
+    event.preventDefault();
+    opener = img;
+    var overlay = document.createElement('div');
+    overlay.id = 'image-zoom';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-label', 'Enlarged picture');
+    var big = document.createElement('img');
+    big.src = img.currentSrc || img.src;
+    big.alt = img.alt || '';
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'image-zoom-close';
+    button.setAttribute('aria-label', 'Close');
+    // Drawn, not the "x" character: a character sits on the text baseline, so it is never quite centred.
+    button.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">'
+      + '<path d="M3 3 L13 13 M13 3 L3 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    button.addEventListener('click', function (e) { e.stopPropagation(); close(); });
+    overlay.appendChild(big);
+    if (img.alt) {
+      var caption = document.createElement('div');
+      caption.className = 'image-zoom-caption';
+      caption.textContent = img.alt;
+      caption.addEventListener('click', function (e) { e.stopPropagation(); });
+      overlay.appendChild(caption);
+    }
+    overlay.appendChild(button);
+    overlay.addEventListener('click', close);
+    document.body.appendChild(overlay);
+    document.addEventListener('keydown', onKey);
+    button.focus();
+  });
+})();
+"""
+
+
 def scroll_chat(force: bool = False) -> rx.event.EventSpec:
     """Keep the newest text in view, but only if the visitor is already near the bottom.
 
@@ -418,7 +481,8 @@ class State(rx.State):
     def on_load(self):
         self._restore_pending()
         self._refresh()
-        return rx.call_script(COUNTDOWN_SCRIPT)  # starts the session timer in the browser (once per page)
+        # The session timer, and click-to-enlarge for pictures, both run in the browser (set up once per page).
+        return [rx.call_script(COUNTDOWN_SCRIPT), rx.call_script(ZOOM_SCRIPT)]
 
     @rx.event
     def end_session(self):
