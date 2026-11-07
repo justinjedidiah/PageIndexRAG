@@ -218,6 +218,7 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
             expect(page.locator("#pending-detail")).to_contain_text("No model calls", timeout=10000)
             expect(page.get_by_role("button", name="Index it")).to_be_enabled()
             page.get_by_role("button", name="Index it").click()
+            expect(page.get_by_role("alertdialog")).to_have_count(0)  # Free costs nothing: no confirmation
             expect(page.get_by_role("button", name="Index it")).to_have_count(0, timeout=60000)
             expect(page.get_by_text("Heron Notes").first).to_be_visible(timeout=15000)
 
@@ -399,8 +400,26 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
 
         step("everything clickable shows a hand cursor", clickables_show_a_hand)
 
-        def index_it() -> None:
+        def index_and_confirm() -> None:
+            """Index it with a paid preset: a confirmation shows the cost first."""
             page.get_by_role("button", name="Index it").click()
+            dialog = page.get_by_role("alertdialog")
+            expect(dialog.locator("#confirm-cost")).to_contain_text("Model calls", timeout=10000)
+            dialog.get_by_role("button", name="Start indexing").click()
+            expect(dialog).to_have_count(0, timeout=10000)
+
+        def index_it() -> None:
+            # Cancel in the confirmation: nothing starts, and the document is still waiting.
+            page.get_by_role("button", name="Index it").click()
+            dialog = page.get_by_role("alertdialog")
+            expect(dialog).to_contain_text("Index Pelican Care Guide?", timeout=10000)
+            expect(dialog.locator("#confirm-cost")).to_contain_text(" in, ", timeout=10000)
+            page.wait_for_timeout(500)  # let the popup finish fading in before the screenshot
+            page.screenshot(path=str(out / "07b-confirm.png"))
+            dialog.get_by_role("button", name="Cancel").click()
+            expect(dialog).to_have_count(0, timeout=10000)
+            expect(page.get_by_role("button", name="Index it")).to_be_visible()
+            index_and_confirm()
             # The button disappears as soon as indexing starts; the toast means it has finished and saved.
             expect(page.get_by_text("Indexed Pelican Care Guide").first).to_be_visible(timeout=60000)
             expect(page.get_by_role("button", name="Index it")).to_have_count(0, timeout=60000)
@@ -434,7 +453,7 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
             page.set_input_files("input[type=file]", str(pelican))
             expect(page.locator("#replace-note")).to_be_visible(timeout=30000)
             page.locator("[data-preset=budget]").click()
-            page.get_by_role("button", name="Index it").click()
+            index_and_confirm()
             expect(page.get_by_text("Indexed Pelican Care Guide").first).to_be_visible(timeout=60000)
             expect(page.get_by_text("Pelican Care Guide", exact=True)).to_have_count(1)  # replaced, not added
             page.set_input_files("input[type=file]", str(pelican))
@@ -472,7 +491,7 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
             make_long_docx(long_doc)
             page.set_input_files("input[type=file]", str(long_doc))
             page.locator("[data-preset=full]").click(timeout=30000)
-            page.get_by_role("button", name="Index it").click()
+            index_and_confirm()
             expect(page.get_by_text("Indexing with your key...")).to_be_visible(timeout=15000)
             page.wait_for_timeout(1500)  # a few summaries done, most still to go
             page.get_by_role("button", name="End session and delete my data").click()

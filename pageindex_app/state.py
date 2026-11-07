@@ -152,6 +152,11 @@ class State(rx.State):
     pending_name: str = ""
     replace_note: str = ""  # set when the pending upload is already in the library: indexing it again replaces it
     pending_detail: str = ""
+    # The cost of the options chosen now, in parts, for the confirmation shown before anything is spent.
+    pending_calls: int = 0
+    pending_tokens: str = ""  # "about 10,029 in, 1,760 out"
+    pending_size: str = ""  # "16 sections, 0 images to describe"
+    confirm_open: bool = False
     rebuilding: bool = False
     # Indexing options, as plain values (see IndexOptions). The preset is "custom" once they match none.
     preset: str = DEFAULT_PRESET
@@ -232,6 +237,10 @@ class State(rx.State):
         return PROVIDERS[self.provider].key_url
 
     @rx.var
+    def preset_label(self) -> str:
+        return PRESET_LABELS.get(self.preset, "Custom options")
+
+    @rx.var
     def needs_key_to_index(self) -> bool:
         return self.opt_summaries == "llm" or self.opt_images
 
@@ -278,6 +287,10 @@ class State(rx.State):
         self.pending_name = ""
         self.replace_note = ""
         self.pending_detail = ""
+        self.pending_calls = 0
+        self.pending_tokens = ""
+        self.pending_size = ""
+        self.confirm_open = False
         self.preset_choices = []
         self._estimates = {}
 
@@ -367,6 +380,9 @@ class State(rx.State):
         self.preset = matching_preset(options) or "custom"
         images = f"{current.images} image{'' if current.images == 1 else 's'} to describe"
         self.pending_detail = f"{current.sections} sections, {images}. {_cost_text(current)}"
+        self.pending_calls = current.calls
+        self.pending_tokens = f"about {current.input_tokens:,} in, {current.output_tokens:,} out"
+        self.pending_size = f"{current.sections} sections, {images}"
 
     async def _options_changed(self, tree_changed: bool):
         """Refresh the estimates; rebuild the pending tree first when a tree option changed (free, no LLM)."""
@@ -601,6 +617,24 @@ class State(rx.State):
         self.opt_images = bool(value)
         async for update in self._options_changed(tree_changed=False):
             yield update
+
+    @rx.event
+    def ask_to_index(self):
+        """"Index it": straight away when it costs nothing (Free), else first a confirmation showing the cost."""
+        if self.index_hint or self.indexing or self.rebuilding or not self.has_pending:
+            return
+        if not self.needs_key_to_index:
+            return State.confirm_index
+        self.confirm_open = True
+
+    @rx.event
+    def set_confirm_open(self, value: bool):
+        self.confirm_open = value
+
+    @rx.event
+    def start_indexing(self):
+        self.confirm_open = False
+        return State.confirm_index
 
     @rx.event
     def cancel_pending(self):

@@ -370,16 +370,62 @@ def pending_view() -> rx.Component:
         rx.hstack(
             rx.button(
                 "Index it",
-                on_click=State.confirm_index,
+                on_click=State.ask_to_index,
                 loading=State.rebuilding,
                 disabled=State.index_hint != "",
                 **PRIMARY,
             ),
             rx.button("Cancel", variant="soft", color_scheme="gray", on_click=State.cancel_pending),
         ),
+        confirm_indexing_dialog(),
         spacing="2",
         align="start",
         width="100%",
+    )
+
+
+def _cost_row(label: str, value) -> rx.Component:
+    return rx.data_list.item(
+        rx.data_list.label(label, min_width="96px"),
+        rx.data_list.value(value),
+        align="center",
+    )
+
+
+def confirm_indexing_dialog() -> rx.Component:
+    """Shown before indexing spends anything on the visitor's key: what will happen, and what it costs."""
+    return rx.alert_dialog.root(
+        rx.alert_dialog.content(
+            rx.alert_dialog.title(f"Index {State.pending_name}?"),
+            rx.alert_dialog.description(
+                "This uses your API key. Your provider charges the cost to your account.", **MUTED
+            ),
+            rx.box(
+                rx.data_list.root(
+                    _cost_row("Preset", State.preset_label),
+                    _cost_row("Model", f"{State.provider_label} · {State.index_model}"),
+                    _cost_row("Document", State.pending_size),
+                    _cost_row("Model calls", f"about {State.pending_calls}"),
+                    _cost_row("Tokens", State.pending_tokens),
+                    size="2",
+                    spacing="2",
+                ),
+                padding="1em",
+                margin_y="1em",
+                border=BORDER,
+                border_radius="10px",
+                id="confirm-cost",
+            ),
+            rx.hstack(
+                rx.alert_dialog.cancel(rx.button("Cancel", variant="soft", color_scheme="gray")),
+                rx.alert_dialog.action(rx.button("Start indexing", on_click=State.start_indexing, **PRIMARY)),
+                justify="end",
+                spacing="3",
+            ),
+            max_width="420px",
+        ),
+        open=State.confirm_open,
+        on_open_change=State.set_confirm_open,
     )
 
 
