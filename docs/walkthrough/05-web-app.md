@@ -73,6 +73,8 @@ A URL like `/api/files/sample/meridian-...-e3546aaf/images/img-1.png` is split i
 
 `HEADERS`: `Cache-Control: private, max-age=3600` (the browser may reuse the image for an hour but shared caches must not) and `X-Content-Type-Options: nosniff` (the browser must treat it as an image, never guess it is something else).
 
+A second route, `/api/files/{scope}/{doc_id}/pages/{n}.png`, serves pictures of an uploaded PDF's pages (`serve_page`). The name must be digits then `.png`; samples have none (404). It calls `library.page_file` in a worker thread (`run_in_threadpool`), since the first request for a page renders it; any error in a damaged file becomes a 404, never a crash.
+
 Starlette is the small web framework Reflex itself is built on, so this plugs in naturally.
 
 ## `pageindex_app.py`: the app itself
@@ -396,6 +398,7 @@ Renders text as Markdown (answers, section text) with table borders and images t
 - A scrolling area containing: `empty_chat()` (instructions, and the four sample-question cards) **only while there are no messages**; the messages (`rx.foreach(State.messages, message_view)`); and an invisible box with `id="chat-end"` that the scroll script targets.
 - `message_view`: `rx.cond(message.role == "user", <bubble on the right>, assistant_message(message))`.
 - `live_answer` is the answer being written, shown under the messages while `thinking`: its steps so far, then a spinner and "Working..." until text arrives, then the text as it streams.
+- **Pages of a PDF section**: `open_source` also fills `source_pages` (a `PageView(url, label)` per page of the section, at most 30, with `source_pages_note` saying "First 30 of 33 pages.") for an uploaded PDF. The source panel then shows a **Text | Pages** switch (`source_tab`, a Radix segmented control); "Pages" stacks the pages with their printed numbers, as `<img loading="lazy">` so only the pages scrolled to are rendered, and each enlarges on click like any picture.
 - **Click to enlarge**: the chat and the source panel carry a `data-zoom-area` attribute, and `ZOOM_SCRIPT` (state.py, started by `on_load` with the countdown) listens for clicks on any picture inside them, including pictures rendered from Markdown, which have no Reflex events. It opens a full-screen overlay in plain browser code (no server round trip): the picture scaled to fit the screen with its description below; Escape, the close button (a drawn icon, centred in its circle) or a click anywhere closes it. Styles are in `assets/app.css` (`#image-zoom`).
 - `prose` renders Markdown with maths and raw HTML switched off (`use_math=False, use_katex=False, use_raw=False`): "$10 billion ... $34 billion" is money, not a formula, and document text and model answers are untrusted, so HTML in them shows as text.
 - `assistant_message` (a finished answer) stacks, in order: the steps (`rx.foreach(message.steps, step_line)`, only when there are any): each is the model's one-line note at the same size as the answer, then a small grey line saying what it did, so the message reads like a conversation; the answer (`prose`, the same look whether or not it was found); the images; and the **citation chips** (each one `on_click=State.open_source(citation.ref)`).
@@ -427,6 +430,6 @@ rx.grid(
 2. **No rate limiting.** One visitor could upload up to 5 documents of 15 MB each repeatedly, using the server's CPU and disk (they pay Anthropic, but the server cost is yours). A per-address limit is not built.
 3. **The key is typed into the page and travels to the server once.** It is not stored or logged, but on a public site this needs **HTTPS**, otherwise it crosses the network readable. (Reflex's default memory state is used; if you ever configure Redis for state, the key would be stored there too.)
 4. **Chat history is not saved anywhere**: closing the tab loses it.
-5. **PDF pages are not shown**: the source panel shows a PDF section's text and printed page numbers, not the page itself (planned).
+5. **Pages only for uploaded PDFs**: the samples are Word files, which have no fixed pages.
 6. **Never run against a real key from the web page yet**: the browser test (file 06) uses the offline fake model.
 7. The page loads a font from Google (see above).

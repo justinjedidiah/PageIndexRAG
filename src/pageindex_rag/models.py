@@ -109,6 +109,8 @@ class DocumentIndex(BaseModel):
     indexed_with: IndexedWith | None = None  # None when no model was used (Free) or for older indexes
     # Where the tree's sections came from: the document's headings, else its typed contents page, else lines
     # formatted like headings, else nothing found (the text is cut by size). None for older indexes.
+    # A PDF's printed page numbers, by page ("iv", "12"): for showing pages. None for other files.
+    page_labels: list[str] | None = None
     structure_source: Literal["bookmarks", "headings", "typed_toc", "formatting", "none"] | None = None
 
     def node_map(self) -> dict[str, Node]:

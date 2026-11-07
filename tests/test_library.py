@@ -68,3 +68,65 @@ def test_image_file_only_serves_images_inside_the_document_folder(tmp_path, sett
         assert library.image_file(doc.doc_id, relative) is None
     for doc_id in ("../s", "..", "No-Such-Doc", doc.doc_id.upper(), "x" * 200):
         assert library.image_file(doc_id, "images/img-1.png") is None
+
+
+# ---- pictures of an uploaded PDF's pages ("View page") ----
+
+import io  # noqa: E402
+
+from PIL import Image as PILImage  # noqa: E402
+
+from .test_pdf import BODY, make_pdf  # noqa: E402
+
+TOKEN = "token-12345"
+
+
+def pdf_session(tmp_path, settings, name="guide.pdf", pages=3):
+    sessions = SessionManager(tmp_path / "sessions", ttl_seconds=100)
+    sessions.ensure(TOKEN)
+    uploads = sessions.uploads_dir(TOKEN)
+    uploads.mkdir()
+    path = make_pdf(uploads / name, [[("h", f"Part {n}"), ("p", BODY * 3)] for n in range(pages)],
+                    labels=[(0, "ROMAN_LOWER", 1)])
+    index = index_document(path, sessions.store(TOKEN), settings, use_llm=False)
+    return sessions, index, path
+
+
+def test_a_page_of_an_uploaded_pdf_is_rendered_once_and_kept(tmp_path, settings, monkeypatch):
+    sessions, index, _ = pdf_session(tmp_path, settings)
+    assert index.page_labels == ["i", "ii", "iii"]
+    library = Library.for_session(settings, sessions, TOKEN)
+
+    page = library.page_file(index.doc_id, 1)
+    assert page is not None and page.parent == sessions.store(TOKEN).doc_dir(index.doc_id).resolve() / "pages"
+    width, height = PILImage.open(io.BytesIO(page.read_bytes())).size
+    assert width == 1200 and height > width  # a portrait page, sharp enough to read
+
+    import pageindex_rag.library as library_module
+
+    monkeypatch.setattr(library_module, "render_page", lambda *a: (_ for _ in ()).throw(AssertionError("rendered again")))
+    assert library.page_file(index.doc_id, 1) == page  # kept: not rendered again
+
+
+def test_no_page_for_a_wrong_number_another_file_or_another_session(tmp_path, settings):
+    sessions, index, path = pdf_session(tmp_path, settings)
+    library = Library.for_session(settings, sessions, TOKEN)
+    assert library.page_file(index.doc_id, 3) is None and library.page_file(index.doc_id, -1) is None
+    assert library.page_file("../" + index.doc_id, 0) is None
+
+    sessions.ensure("someone-else-token")
+    assert Library.for_session(settings, sessions, "someone-else-token").page_file(index.doc_id, 0) is None
+    assert Library.for_session(settings, sessions, None).page_file(index.doc_id, 0) is None
+
+    # A later upload with the same name but other content replaces the file: its pages are not this document's.
+    make_pdf(path, [[("h", "Something else"), ("p", "Entirely different text about wind turbines.")]])
+    assert library.page_file(index.doc_id, 0) is None
+
+
+def test_a_word_document_has_no_pages(tmp_path, settings):
+    sessions = SessionManager(tmp_path / "sessions", ttl_seconds=100)
+    sessions.ensure(TOKEN)
+    sessions.uploads_dir(TOKEN).mkdir()
+    doc = index_document(write_md(sessions.uploads_dir(TOKEN), "d.md", "# D\n\ntext\n"), sessions.store(TOKEN), settings, use_llm=False)
+    assert doc.page_labels is None
+    assert Library.for_session(settings, sessions, TOKEN).page_file(doc.doc_id, 0) is None

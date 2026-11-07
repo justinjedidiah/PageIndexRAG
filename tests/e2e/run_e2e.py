@@ -275,8 +275,20 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
             expect(page.locator("#browse-structure")).to_have_text("Outline from the PDF's bookmarks.", timeout=10000)
             outline.get_by_role("button").filter(has=page.get_by_text("Looking after them", exact=True)).click()
             expect(outline.get_by_text("Solar Brochure · p. 3")).to_be_visible(timeout=10000)  # cited by page
+            # The section as its page: a picture of page 3, rendered on request.
+            outline.get_by_role("radio", name="Pages").click()
+            pages = page.locator("#source-pages img")
+            expect(pages).to_have_count(1, timeout=10000)
+            expect(page.locator("#source-pages")).to_contain_text("p. 3")
+            page.wait_for_function(
+                "() => { const i = document.querySelector('#source-pages img'); return i && i.complete && i.naturalWidth >= 1000; }",
+                timeout=20000,
+            )
+            page.screenshot(path=str(out / "02e-pdf-pages.png"))
+            outline.get_by_role("radio", name="Text").click()
+            expect(page.locator("#source-pages")).to_have_count(0)
 
-        step("a PDF with bookmarks is indexed, its sections cited by page", pdf_with_bookmarks, "02d-pdf.png")
+        step("a PDF with bookmarks is indexed, its sections cited by page and shown as pages", pdf_with_bookmarks, "02d-pdf.png")
         step("the PDF's section closes", dismiss_dialog)
 
         def pdf_refusals() -> None:

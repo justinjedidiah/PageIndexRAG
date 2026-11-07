@@ -98,6 +98,7 @@ def build_index(
         ),
         root=root,
         images=images,
+        page_labels=page_labels,
         summary=root.summary,
         options=options,
     )

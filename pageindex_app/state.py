@@ -36,12 +36,13 @@ from pageindex_rag.outline import node_markdown, outline_rows
 from pageindex_rag.uploads import UploadError, safe_filename, validate_upload
 
 from .runtime import sessions, settings
-from .viewmodels import ChatMessage, CitationView, DocView, ImageView, OutlineRowView, PresetView, StepView
+from .viewmodels import ChatMessage, CitationView, DocView, ImageView, OutlineRowView, PageView, PresetView, StepView
 
 log = logging.getLogger(__name__)
 
 UPLOAD_ID = "doc_upload"
 MAX_HISTORY_TURNS = 6  # earlier question/answer pairs the agent gets as context
+MAX_SOURCE_PAGES = 30  # pages a PDF section shows in the source panel (a whole chapter can be dozens)
 DRAFT_INTERVAL = 0.08  # seconds between streamed-text updates sent to the browser
 TREE_OPTIONS = ("split_large", "max_leaf_tokens", "small_sections", "min_leaf_tokens")  # changing these rebuilds the tree
 MAX_LEAF_CHOICES = sorted({"500", "1000", "2000", "4000", str(settings.max_leaf_tokens)}, key=int)
@@ -248,6 +249,10 @@ class State(rx.State):
     source_location: str = ""
     source_summary: str = ""
     source_text: str = ""
+    # An uploaded PDF's section can also be shown as its pages ("Text" / "Pages" in the source panel).
+    source_pages: list[PageView] = []
+    source_pages_note: str = ""  # "First 30 of 33 pages." when a section has more than are shown
+    source_tab: str = "text"
 
     browse_open: bool = False
     browse_title: str = ""
@@ -825,7 +830,27 @@ class State(rx.State):
         self.source_location = f"{index.title} · {node.location.label()}"
         self.source_summary = node.summary
         self.source_text = node_markdown(index, node, lambda record: image_url(scope, doc_id, record.file))
+        self.source_pages, self.source_pages_note = self._section_pages(index, node, scope)
+        self.source_tab = "text"
         self.source_open = True
+
+    def _section_pages(self, index: DocumentIndex, node, scope: str) -> tuple[list[PageView], str]:
+        """The pages of an uploaded PDF's section, for the "Pages" view; none for other documents."""
+        start, end = node.location.pdf_page_start, node.location.pdf_page_end
+        if index.kind != "pdf" or not index.page_labels or start is None or scope == SAMPLE_SCOPE:
+            return [], ""
+        end = start if end is None else end
+        shown = range(start, min(end, start + MAX_SOURCE_PAGES - 1) + 1)
+        pages = [PageView(image_url(scope, index.doc_id, f"pages/{page}.png"), index.page_labels[page]) for page in shown]
+        total = end - start + 1
+        return pages, (f"First {len(pages)} of {total} pages." if total > len(pages) else "")
+
+    @rx.event
+    def set_source_tab(self, value: str | list[str]):  # the segmented control may send a list (multi-select)
+        if isinstance(value, list):
+            value = value[0] if value else ""
+        if value in ("text", "pages"):
+            self.source_tab = value
 
     @rx.event
     def set_source_open(self, value: bool):

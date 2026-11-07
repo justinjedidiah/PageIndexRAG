@@ -363,6 +363,16 @@ Any failure returns `None`, which the web route turns into a plain "404 not foun
 
 `image_media_type` maps `.png` -> `image/png` etc. so the browser treats the response as an image.
 
+### `page_file`: a picture of an uploaded PDF's page
+
+`page_file(doc_id, page)` returns a PNG of one page of an uploaded PDF, for the source panel's "Pages" view. It renders the page the first time it is asked for (`pdf_pages.render_page`: pdfium, 1200 pixels wide, about 0.2 s and 350 KB a page) and keeps it at `docs/<doc_id>/pages/<n>.png`, inside the session folder, so it is deleted with the session. Checks, in order:
+
+1. A valid `doc_id`, a page number of 0 or more, and a live session (the `Library` knows the session's uploads folder; `for_session` passes it).
+2. A session document, not a sample (the samples are Word files, and their folder is shared and read-only).
+3. Already rendered: return it. Else the document must be a PDF with `page_labels`, and the page within them.
+4. The uploaded file is resolved inside the uploads folder, and its bytes must still give this `doc_id` (`doc_id_for`: name plus a SHA-1 of the content). A later upload with the same name but other content overwrites the file, and its pages must not be shown for the earlier document.
+5. The PNG is written to a temporary file and moved into place, so a half-written page is never served.
+
 ---
 
 ## `outline.py`: display helpers for the web page

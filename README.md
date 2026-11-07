@@ -8,7 +8,7 @@ Upload a Word document or a PDF (or try the sample library), bring your own API 
 ![An answer with the agent's navigation path and citations](docs/images/screenshot.png)
 -->
 
-> **Status:** works end to end locally. Word (.docx) and text PDFs are supported (PDF: bookmarks or a printed contents page, page-number citations, charts and pictures as images, ruled tables, two columns). A public demo is planned (Railway).
+> **Status:** works end to end locally. Word (.docx) and text PDFs are supported (PDF: bookmarks or a printed contents page, page-number citations with a view of the pages, charts and pictures as images, ruled tables, two columns). A public demo is planned (Railway).
 
 ## How it works
 
@@ -93,7 +93,7 @@ samples/        the sample documents and their indexes
 
 ## Roadmap
 
-- A page view for PDF citations, and generated structure for documents without headings
+- Generated structure for documents without headings
 - A public demo
 - An evaluation against a vector-RAG baseline
 

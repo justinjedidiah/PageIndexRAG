@@ -1,11 +1,15 @@
 """What one visitor sees: the shared sample documents plus their own session documents."""
 
+import os
 import re
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
 from .config import Settings
+from .indexing.pipeline import doc_id_for
 from .models import DocumentIndex, FileKind
+from .pdf_pages import render_page
 from .sessions import SessionManager
 from .storage import Store
 
@@ -25,14 +29,17 @@ class DocInfo:
 
 
 class Library:
-    def __init__(self, samples: Store | None, session: Store | None):
+    def __init__(self, samples: Store | None, session: Store | None, uploads: Path | None = None):
         self.samples = samples
         self.session = session
+        self.uploads = uploads  # the session's uploaded files: where a PDF's pages are rendered from
 
     @classmethod
     def for_session(cls, settings: Settings, sessions: SessionManager, token: str | None) -> "Library":
         live = sessions.get(token) if token else None
-        return cls(Store(settings.samples_dir), sessions.store(token) if live else None)
+        if not live:
+            return cls(Store(settings.samples_dir), None)
+        return cls(Store(settings.samples_dir), sessions.store(token), sessions.uploads_dir(token))
 
     def documents(self) -> list[DocInfo]:
         docs = {}
@@ -63,6 +70,37 @@ class Library:
                 path = (base / "images" / Path(relative).name).resolve()
                 return path if path.is_file() and path.is_relative_to(base) else None
         return None
+
+
+    def page_file(self, doc_id: str, page: int) -> Path | None:
+        """A picture of one page of an uploaded PDF, rendered the first time it is asked for; else None.
+
+        Only for the session's own PDFs (the samples are Word files, and their folder is shared and
+        read-only). The upload must still be the file the document was indexed from: a later upload
+        with the same name but other content replaces the file, and must not show its pages here.
+        """
+        if not _DOC_ID.match(doc_id) or page < 0 or not self.session or not self.uploads:
+            return None
+        if self.is_sample(doc_id) or not self.session.has_index(doc_id):
+            return None
+        path = self.session.doc_dir(doc_id).resolve() / "pages" / f"{page}.png"
+        if path.is_file():
+            return path  # rendered before, after these same checks
+        index = self.session.load_index(doc_id)
+        if index.kind != "pdf" or not index.page_labels or page >= len(index.page_labels):
+            return None
+        source = (self.uploads / index.source_path).resolve()
+        if not source.is_file() or not source.is_relative_to(self.uploads.resolve()):
+            return None
+        if doc_id_for(source.stem, source.read_bytes()) != doc_id:
+            return None  # replaced by another file with the same name
+        data = render_page(source, page)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handle, temporary = tempfile.mkstemp(dir=path.parent, suffix=".tmp")  # whole file or nothing
+        with os.fdopen(handle, "wb") as out:
+            out.write(data)
+        os.replace(temporary, path)
+        return path
 
 
 def image_media_type(path: Path) -> str:

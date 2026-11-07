@@ -28,7 +28,7 @@ FileKind = Literal["pdf", "docx", "markdown"]
 
 The three source types. `markdown` is only used by the developer command line and the tests (the web page refuses it). `pdf` is in the list already because the data model is ready for PDF even though the PDF reader is not written yet.
 
-Newer fields, all optional so older saved indexes still load: `Node.summary_source` (`"llm"`, `"preview"` for a free first-sentences preview, or empty), `Location.covers`, and `DocumentIndex.options` (the `IndexOptions` the document was indexed with; see file 02).
+Newer fields, all optional so older saved indexes still load: `Node.summary_source` (`"llm"`, `"preview"` for a free first-sentences preview, or empty), `Location.covers`, `DocumentIndex.options` (the `IndexOptions` the document was indexed with; see file 02), and `DocumentIndex.page_labels` (a PDF's printed page numbers, by page, for showing its pages).
 
 ### `Location`: where a section came from
 

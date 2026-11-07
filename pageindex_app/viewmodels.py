@@ -27,6 +27,12 @@ class ImageView:
 
 
 @dataclasses.dataclass
+class PageView:
+    url: str  # a picture of the page, rendered on first request
+    label: str  # the page number printed on it ("iv", "19")
+
+
+@dataclasses.dataclass
 class StepView:
     label: str
     note: str = ""  # what the model said before taking this step

@@ -8,7 +8,7 @@ from pageindex_rag.sessions import describe_duration
 
 from .runtime import settings
 from .state import MAX_LEAF_CHOICES, MIN_LEAF_CHOICES, UPLOAD_ID, State
-from .viewmodels import ChatMessage, CitationView, DocView, ImageView, OutlineRowView, PresetView, StepView
+from .viewmodels import ChatMessage, CitationView, DocView, ImageView, OutlineRowView, PageView, PresetView, StepView
 
 EXAMPLES = [
     "Who is the commander of Meridian Station, and what shift do they work?",
@@ -763,10 +763,49 @@ def source_view() -> rx.Component:
         rx.text(State.source_title, size="4", weight="bold"),
         rx.text(State.source_location, **MUTED),
         rx.cond(State.source_summary != "", rx.callout(State.source_summary, icon="sparkles", size="1", color_scheme="gray")),
-        prose(text=State.source_text),
+        rx.cond(
+            State.source_pages.length() > 0,
+            rx.segmented_control.root(
+                rx.segmented_control.item("Text", value="text"),
+                rx.segmented_control.item("Pages", value="pages"),
+                value=State.source_tab,
+                on_change=State.set_source_tab,
+                size="1",
+                id="source-tab",
+            ),
+        ),
+        rx.cond(State.source_tab == "pages", source_pages(), prose(text=State.source_text)),
         spacing="3",
         align="start",
         width="100%",
+    )
+
+
+def source_page(page: PageView) -> rx.Component:
+    return rx.vstack(
+        rx.text(f"p. {page.label}", **MUTED),
+        # Rendered when first asked for, so only load the pages scrolled to. Click to enlarge (ZOOM_SCRIPT).
+        rx.el.img(
+            src=page.url,
+            alt=f"Page {page.label}",
+            loading="lazy",
+            width="100%",
+            style={"border": BORDER, "border_radius": "6px", "background": "white", "min_height": "120px"},
+        ),
+        spacing="1",
+        width="100%",
+    )
+
+
+def source_pages() -> rx.Component:
+    """The section's pages, as they look in the PDF."""
+    return rx.vstack(
+        rx.text("Click a page to enlarge it.", **MUTED),
+        rx.foreach(State.source_pages, source_page),
+        rx.cond(State.source_pages_note != "", rx.text(State.source_pages_note, **MUTED)),
+        spacing="4",
+        width="100%",
+        id="source-pages",
     )
 
 
