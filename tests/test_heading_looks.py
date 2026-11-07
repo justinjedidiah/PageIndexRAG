@@ -126,3 +126,81 @@ def test_formatting_is_not_used_when_the_document_has_headings(tmp_path, setting
     index = build_index(word_doc(tmp_path, True), Store(tmp_path / "data"), settings, preset_options("free", settings))
     assert index.structure_source == "headings"
     assert "Tip" not in [n.title for n in index.root.walk()]  # bold lines inside styled sections stay text
+
+
+# ---- inside a section too big to read in one go (documents with headings) ----
+
+from pageindex_rag.indexing.heading_looks import apply_section_looks  # noqa: E402
+
+LONG = BODY * 12  # about 300 tokens: over the small limit used below
+
+
+def test_a_big_section_gets_its_bold_lines_as_sub_headings():
+    blocks = [text("Guide"), Heading(1, "Setup"), text("Intro to the setup."),
+              bold("Installing the rails"), text(LONG), bold("Mounting the panels"), text(LONG),
+              bold("Connecting the cables"), text(LONG), Heading(1, "Upkeep"), text(BODY)]
+    result = apply_section_looks(blocks, max_tokens=200)
+    assert headings(result) == [(1, "Setup"), (2, "Installing the rails"), (2, "Mounting the panels"),
+                                (2, "Connecting the cables"), (1, "Upkeep")]
+    assert result[2] == text("Intro to the setup.")  # the text before the first one stays the section's own
+    assert result[0] == text("Guide")  # text before the first heading is not touched
+
+
+def test_a_single_bold_line_in_a_big_section_stays_text():
+    blocks = [Heading(1, "Setup"), text(LONG), bold("Safety warning"), text(LONG), Heading(1, "Upkeep"), text(BODY)]
+    assert apply_section_looks(blocks, max_tokens=200) == blocks  # cut by size later, not at the warning
+
+
+def test_a_section_small_enough_to_read_is_left_alone():
+    blocks = [Heading(1, "Setup"), bold("Rails"), text(BODY), bold("Panels"), text(BODY), Heading(1, "Upkeep")]
+    assert apply_section_looks(blocks, max_tokens=2000) == blocks
+
+
+def test_sub_heading_levels_go_at_most_two_below_the_section():
+    blocks = [Heading(2, "Setup"),
+              bold("Roof work", 16), text(LONG), bold("Rails"), text(LONG), Paragraph("NOTE ON SAFETY", size=11), text(LONG),
+              bold("Roof checks", 16), text(LONG), bold("Panels"), text(LONG), Paragraph("NOTE ON WIRES", size=11), text(LONG)]
+    result = apply_section_looks(blocks, max_tokens=200)
+    assert headings(result) == [(2, "Setup"), (3, "Roof work"), (4, "Rails"), (4, "NOTE ON SAFETY"),
+                                (3, "Roof checks"), (4, "Panels"), (4, "NOTE ON WIRES")]  # a third look is capped
+
+
+def test_numbered_sub_headings_count_from_the_section():
+    blocks = [Heading(1, "3 Setup"), bold("3.1 Rails"), text(LONG), bold("3.1.1 Bolts"), text(LONG), bold("3.2 Panels"), text(LONG)]
+    result = apply_section_looks(blocks, max_tokens=200)
+    assert headings(result) == [(1, "3 Setup"), (2, "3.1 Rails"), (3, "3.1.1 Bolts"), (2, "3.2 Panels")]
+
+
+def big_section_doc(tmp_path):
+    doc = Document()
+    doc.add_heading("Setup", level=1)
+    doc.add_paragraph("What this chapter covers.")
+    for title in ("Installing the rails", "Mounting the panels", "Connecting the cables"):
+        doc.add_paragraph().add_run(title).bold = True
+        doc.add_paragraph(LONG)
+    doc.add_heading("Upkeep", level=1)
+    doc.add_paragraph(BODY)
+    path = tmp_path / "big-section.docx"
+    doc.save(path)
+    return path
+
+
+def test_a_word_document_with_a_big_section(tmp_path, settings):
+    import dataclasses
+
+    roomy = dataclasses.replace(settings, max_leaf_tokens=400)
+    index = build_index(big_section_doc(tmp_path), Store(tmp_path / "data"), roomy, preset_options("free", roomy))
+    setup = index.root.children[0]
+    assert index.structure_source == "headings"
+    assert [c.title for c in setup.children] == ["Installing the rails", "Mounting the panels", "Connecting the cables"]
+    assert all(c.origin == "original" for c in setup.children)  # real titles from the document: never renamed
+    assert setup.text == "What this chapter covers."
+
+
+def test_not_used_when_splitting_is_switched_off(tmp_path, settings):
+    import dataclasses
+
+    roomy = dataclasses.replace(settings, max_leaf_tokens=400)
+    options = preset_options("free", roomy, split_large=False)
+    index = build_index(big_section_doc(tmp_path), Store(tmp_path / "data"), roomy, options)
+    assert index.root.children[0].children == []  # the section is kept whole, as asked

@@ -87,6 +87,12 @@ The last try, only when a document has no headings and no trustworthy contents p
 4. **Give up** if the kept lines hold more than 30% of the text, or are more than two thirds of the paragraphs: the document just uses a lot of bold. Measured by text rather than by paragraphs because in an FAQ (a question, then a one-paragraph answer) half the paragraphs are headings, yet they are a small part of the text.
 5. **Levels**: from numbering if most are numbered "1.2"-style, else by look (biggest first, then bold, then capitals), at most 3.
 
+**Sub-headings inside a big section** (`apply_section_looks`)
+
+A document with headings can still have one huge section whose parts are only bold lines. When splitting is on (it is part of "split sections too big to read in one go"), each section whose own text, up to the next heading, is over `max_leaf_tokens` gets the same detector run on just its paragraphs, with two differences: a look must appear **at least twice inside that section** (with text between), and the lines it finds go **one level below the section** (two looks: one and two levels below; never deeper). A single bold line, such as a warning in the middle, stays text: counting only inside the section stops it from splitting the section into "before" and "after". The normal text size is still the whole document's, so a section printed in a bigger font throughout does not look like all headings. Numbered lines count relative to the shallowest found, so inside "3 Setup", "3.1" and "3.1.1" are one and two levels below it. The text before the first sub-heading stays the section's own; anything still too big is then cut by size as before. The lines found are the document's own titles, so they are `original` nodes and a summarizer never renames them.
+
+Both uses share one function, `find_heading_looks(blocks, paragraphs, normal_size, min_repeats, first_level, max_levels)`; `apply_heading_looks` (the whole document) and `apply_section_looks` (each big section) only choose those settings.
+
 `build_index` records where the tree came from in `structure_source`: `"headings"`, `"typed_toc"`, `"formatting"`, or `"none"` when nothing gave one (the text is then cut by size). The Browse panel and `pageindex tree` show it, so a flat outline explains itself.
 
 **Images**

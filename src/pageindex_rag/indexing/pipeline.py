@@ -22,7 +22,7 @@ from .options import preset_options
 from .preview import fill_previews
 from .refine import refine_tree
 from .tree import build_tree
-from .heading_looks import apply_heading_looks
+from .heading_looks import apply_heading_looks, apply_section_looks
 from .typed_toc import apply_typed_toc
 
 OnProgress = Callable[[int, int, str], None]  # done, total, what just finished
@@ -55,14 +55,17 @@ def build_index(
     from_looks = False
     if not has_headings and not from_contents_page:
         blocks, from_looks = apply_heading_looks(blocks)
-    doc_id = make_doc_id(path)
-
-    root, raw_images = build_tree(blocks, title=path.stem, kind=kind)
     headings = [b for b in blocks if isinstance(b, Heading)]
     # The document's own ToC as reference data: its table of contents if it has one, else its headings.
     source_toc = [TocEntry(title=b.title, level=b.level, page=b.page) for b in blocks if isinstance(b, TocLine)] or [
         TocEntry(title=b.title, level=b.level) for b in headings
     ] or None
+    if options.split_large and (has_headings or from_contents_page):
+        # A section too big to read in one go: look for its own sub-headings before it is cut by size.
+        blocks = apply_section_looks(blocks, options.max_leaf_tokens)
+    doc_id = make_doc_id(path)
+
+    root, raw_images = build_tree(blocks, title=path.stem, kind=kind)
     refine_tree(root, options)
     if options.summaries == "preview":
         fill_previews(root, options.preview_sentences)
