@@ -21,11 +21,11 @@ from toc_rag.indexing import (
     DocumentRejected,
     Estimate,
     IndexingCancelled,
-    build_index,
     enrich_index,
     estimate_index,
 )
 from toc_rag.indexing.estimate import count_describable_images
+from toc_rag.indexing.isolated import build_index_isolated
 from toc_rag.indexing.options import PRESET_DESCRIPTIONS, PRESET_LABELS, matching_preset, preset_options
 from toc_rag.indexing.pdf_cache import forget as forget_saved_read
 from toc_rag.indexing.pipeline import doc_id_for
@@ -73,7 +73,7 @@ WAITING = "Waiting for a free slot: other visitors' documents are being read fir
 
 async def _read_document(path: Path, store, options: IndexOptions) -> DocumentIndex:
     async with _read_slots:
-        return await asyncio.to_thread(build_index, path, store, settings, options)
+        return await asyncio.to_thread(build_index_isolated, path, store, settings, options)
 
 
 def image_url(scope: str, doc_id: str, relative: str) -> str:
@@ -628,7 +628,7 @@ class State(rx.State):
                 if self.building_label != READING:
                     self.building_label = READING
                     yield
-                index = await asyncio.to_thread(build_index, path, store, settings, self._options())
+                index = await asyncio.to_thread(build_index_isolated, path, store, settings, self._options())
         except DocumentRejected as exc:  # password, scanned, too long: the message says which
             log.info("Upload refused: %s", exc)
             self.upload_error = str(exc)
@@ -781,7 +781,7 @@ class State(rx.State):
             if index.options != options:  # e.g. switched between previews and summaries after the upload
                 if job.cancel.is_set():
                     raise IndexingCancelled
-                index = build_index(source, store, settings, options)
+                index = build_index_isolated(source, store, settings, options)
             if options.uses_llm:
                 enrich_index(index, store, settings, None, on_progress, options, cancel=job.cancel, llm=llm)
             with job.lock:
