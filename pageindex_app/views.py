@@ -45,10 +45,22 @@ def prose(text: rx.Var[str]) -> rx.Component:
 # ---- sidebar ----
 
 
-def model_select(label: str, value: rx.Var, on_change, hint: str) -> rx.Component:
+def model_select(label: str, value: rx.Var, on_change, hint: str, note: str) -> rx.Component:
+    """A dropdown of the models this key can use. `note` sits at the top of the open list: what the model must support."""
     return rx.vstack(
         rx.text(label, size="1", weight="medium"),
-        rx.select(State.models, value=value, on_change=on_change, placeholder="Choose a model", size="1", width="100%"),
+        rx.select.root(
+            rx.select.trigger(placeholder="Choose a model", width="100%", custom_attrs={"aria-label": label}),
+            rx.select.content(
+                rx.select.group(
+                    rx.select.label(note),
+                    rx.foreach(State.models, lambda model: rx.select.item(model, value=model)),
+                ),
+            ),
+            value=value,
+            on_change=on_change,
+            size="1",
+        ),
         rx.text(hint, **MUTED),
         spacing="1",
         width="100%",
@@ -70,10 +82,12 @@ def key_card() -> rx.Component:
                     model_select(
                         "Model for indexing", State.index_model, State.set_index_model,
                         "Writes summaries and describes images. A small, cheap model is enough.",
+                        "Pick a model that supports structured output and images.",
                     ),
                     model_select(
                         "Model for chat", State.agent_model, State.set_agent_model,
                         "Navigates the documents and answers. Must support tool calling.",
+                        "Pick a model that supports tool calling.",
                     ),
                     spacing="3",
                     width="100%",

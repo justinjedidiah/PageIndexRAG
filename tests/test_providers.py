@@ -133,3 +133,31 @@ def test_settings_take_models_only_from_the_environment(monkeypatch):
     monkeypatch.setenv("PAGEINDEX_PROVIDER", "mistral")
     with pytest.raises(ValueError):
         get_settings()
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("'tools' is not supported with this model.", "doesn't support tool calling"),
+        ("Function calling is not enabled for models/gemini-x", "doesn't support tool calling"),
+        ("Invalid parameter: 'response_format' of type 'json_schema' is not supported with this model.",
+         "doesn't support structured output"),
+        ("Invalid content type. image_url is only supported by certain models.", "can't read images"),
+        ("This model's maximum context length is 8192 tokens.", "too long for this model"),
+        ("Invalid value for 'temperature'.", "couldn't process the request with this model (status 400)"),
+    ],
+)
+def test_bad_requests_say_why_when_the_provider_does(raw, expected):
+    for exc in (
+        openai.BadRequestError(f"{raw} {SECRET}", response=_http(400), body=None),
+        google_errors.ClientError(400, {"error": {"message": f"{raw} {SECRET}"}}),
+    ):
+        message = friendly_error(exc)
+        assert expected in message
+        assert SECRET not in message and raw not in message  # matched on the server, never shown
+
+
+def test_a_context_overflow_from_langchain_is_recognised():
+    from langchain_google_genai.chat_models import GoogleContextOverflowError
+
+    assert "too long for this model" in friendly_error(GoogleContextOverflowError(400, {"error": {"message": SECRET}}))

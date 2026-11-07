@@ -36,9 +36,43 @@ def friendly_error(exc: Exception, provider: str | None = None) -> str:
         return f"{name} says your key hit a rate limit or has no credit left. Wait a moment or check your account."
     if _any(exc, lc.ModelConnectionError, lc.ModelTimeoutError) or _looks_like_connection_error(exc):
         return f"Could not reach {name}. Check the connection and try again."
+    if _any(exc, lc.ModelInvalidRequestError) or status == 400 or _looks_like_context_overflow(exc):
+        return _bad_request(exc, name)
     if status:
         return f"{name} returned an error (status {status}). Try again in a moment."
     return "Something went wrong. Try again."
+
+
+# A 400 ("bad request") has many causes. The provider's own text usually says which; it is read here on
+# the server and matched against known causes, but never shown: the visitor only ever sees these sentences.
+_UNSUPPORTED = ("not supported", "unsupported", "does not support", "doesn't support", "not available", "not enabled")
+_TOO_LONG = (
+    "context length", "context window", "maximum context", "too many tokens", "prompt is too long",
+    "input is too long", "exceeds the maximum", "token limit", "too long",
+)
+
+
+def _bad_request(exc: Exception, name: str) -> str:
+    reason = _raw_text(exc)
+    unsupported = any(phrase in reason for phrase in _UNSUPPORTED)
+    if unsupported and ("tool" in reason or "function" in reason):
+        return "This model doesn't support tool calling, which the chat needs. Choose another model for chat."
+    if unsupported and any(word in reason for word in ("response_format", "json_schema", "structured", "json mode")):
+        return "This model doesn't support structured output, which indexing needs. Choose another model for indexing."
+    if (unsupported or "invalid" in reason) and "image" in reason:
+        return "This model can't read images. Choose another model for indexing, or turn image descriptions off."
+    if _looks_like_context_overflow(exc) or any(phrase in reason for phrase in _TOO_LONG):
+        return "That was too long for this model. Choose a model with a larger context."
+    return f"{name} couldn't process the request with this model (status 400). Choosing another model may help."
+
+
+def _raw_text(exc: Exception) -> str:
+    """All the error text in the chain, lower-cased, for matching only. Never shown or logged."""
+    return " ".join(str(e) for e in _chain(exc)).lower()
+
+
+def _looks_like_context_overflow(exc: Exception) -> bool:
+    return any("ContextOverflow" in type(e).__name__ for e in _chain(exc))
 
 
 def _chain(exc: BaseException) -> Iterator[BaseException]:

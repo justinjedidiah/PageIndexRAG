@@ -253,9 +253,15 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
             expect(pickers).to_have_count(2, timeout=10000)
             expect(page.get_by_placeholder("Choose a chat model to start")).to_be_disabled()
             expect(page.get_by_text("Choose a model for chat (under your API key)")).to_be_visible()
-            # The dropdowns list what the provider says this key can use.
-            pick(pickers.nth(0), "openai-fake-small")
-            pick(page.locator(".rt-SelectTrigger").filter(has_text="Choose a model"), "openai-fake-large")
+            # Each open list starts with what the model must support, then lists what this key can use.
+            for name, note in (("Model for indexing", "Pick a model that supports structured output and images."),
+                               ("Model for chat", "Pick a model that supports tool calling.")):
+                page.get_by_role("combobox", name=name).click()
+                expect(page.get_by_text(note)).to_be_visible(timeout=10000)
+                page.keyboard.press("Escape")
+                expect(page.get_by_text(note)).to_have_count(0, timeout=10000)
+            pick(page.get_by_role("combobox", name="Model for indexing"), "openai-fake-small")
+            pick(page.get_by_role("combobox", name="Model for chat"), "openai-fake-large")
             expect(page.locator(".rt-SelectTrigger").filter(has_text="Choose a model")).to_have_count(0, timeout=10000)
             expect(page.get_by_placeholder("Ask a question about the documents")).to_be_enabled(timeout=10000)
 
