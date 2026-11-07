@@ -101,7 +101,21 @@ def build_index(
         options=options,
     )
     _assign_image_nodes(index)
+    if page_labels is not None:
+        _cite_image_pages(index, {image_id: image.page for image_id, image in raw_images}, page_labels)
     return index
+
+
+def _cite_image_pages(index: DocumentIndex, pages: dict[str, int | None], labels: list[str]) -> None:
+    """A PDF figure is cited by its own page, not its section's whole range."""
+    for record in index.images:
+        page = pages.get(record.id)
+        if page is None or record.location is None:
+            continue
+        label = labels[page] if page < len(labels) else str(page + 1)
+        record.location = record.location.model_copy(
+            update={"pdf_page_start": page, "pdf_page_end": page, "printed_page_start": label, "printed_page_end": label}
+        )
 
 
 def enrich_index(

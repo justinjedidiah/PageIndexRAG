@@ -318,3 +318,140 @@ def test_a_bookmark_title_printed_over_two_lines_is_matched(tmp_path):
     c.save()
     blocks = extract_pdf(tmp_path / "box.pdf").blocks
     assert blocks[:2] == [Heading(1, "Box A: Global supply chains"), Paragraph("The box text starts here.")]
+
+
+# ---- figures and columns (pdf_layout.py) ----
+
+import io as _io  # noqa: E402
+
+from pageindex_rag.indexing.blocks import Image, Table  # noqa: E402
+from tests.conftest import make_noisy_png  # noqa: E402
+
+SENTENCE = "The output of the panels rises through the morning and falls again in the late afternoon."
+
+
+def draw_chart(c, x, y, width=300, height=160):
+    """A bar chart as PDF software draws one: axes, gridlines and bars as shapes, labels as loose text."""
+    c.setLineWidth(0.5)
+    c.line(x, y, x + width, y)
+    c.line(x, y, x, y + height)
+    for step in range(1, 5):
+        c.line(x, y + step * height / 5, x + width, y + step * height / 5)
+    for i, value in enumerate((40, 90, 65, 120, 80, 30)):
+        c.rect(x + 10 + i * 48, y, 30, value, fill=1)
+    c.setFont("Helvetica", 8)
+    for step in range(5):
+        c.drawString(x - 18, y + step * height / 5 - 3, str(step * 25))
+
+
+def test_a_chart_becomes_a_picture_and_its_labels_leave_the_text(tmp_path):
+    c = canvas.Canvas(str(tmp_path / "chart.pdf"))
+    c.setFont("Helvetica", 11)
+    c.drawString(72, 760, SENTENCE)
+    draw_chart(c, 100, 500)
+    c.setFont("Helvetica", 11)
+    c.drawString(72, 440, "Sources: the national energy agency and our own survey of owners.")
+    c.showPage()
+    c.save()
+    blocks = extract_pdf(tmp_path / "chart.pdf").blocks
+    assert [type(b).__name__ for b in blocks] == ["Paragraph", "Image", "Paragraph"]
+    picture = blocks[1]
+    assert picture.ext == "png" and picture.page == 0 and picture.data.startswith(b"\x89PNG")
+    assert PILImage.open(_io.BytesIO(picture.data)).size[0] > 600  # rendered sharp, not at screen size
+    assert all(not b.text.strip().startswith(("0", "25", "50")) for b in blocks if isinstance(b, Paragraph))
+    assert blocks[2].text.startswith("Sources:")  # the note under the chart stays text
+
+
+def test_a_ruled_table_becomes_a_markdown_table(tmp_path):
+    c = canvas.Canvas(str(tmp_path / "table.pdf"))
+    c.setFont("Helvetica", 11)
+    c.drawString(72, 760, SENTENCE)
+    rows = [("Panel", "Output", "Price"), ("Mono", "400 W", "210"), ("Poly", "350 W", "160"), ("Thin film", "120 W", "90")]
+    left, top, col, row = 100, 700, 120, 20
+    for r in range(len(rows) + 1):
+        c.line(left, top - r * row, left + 3 * col, top - r * row)
+    for k in range(4):
+        c.line(left + k * col, top, left + k * col, top - len(rows) * row)
+    for r, cells in enumerate(rows):
+        for k, cell in enumerate(cells):
+            c.drawString(left + k * col + 4, top - r * row - 14, cell)
+    c.showPage()
+    c.save()
+    blocks = extract_pdf(tmp_path / "table.pdf").blocks
+    tables = [b for b in blocks if isinstance(b, Table)]
+    assert len(tables) == 1 and not any(isinstance(b, Image) for b in blocks)
+    assert tables[0].markdown.splitlines()[:3] == ["| Panel | Output | Price |", "| --- | --- | --- |", "| Mono | 400 W | 210 |"]
+    assert not any("Thin film" in b.text for b in blocks if isinstance(b, Paragraph))
+
+
+def test_embedded_pictures_are_cut_out_and_tiny_or_background_ones_skipped(tmp_path):
+    c = canvas.Canvas(str(tmp_path / "pictures.pdf"))
+    c.drawImage(ImageReader(PILImage.new("RGB", (600, 800), "white")), 0, 0, 612, 792)  # a page background
+    c.setFont("Helvetica", 11)
+    c.drawString(72, 760, SENTENCE)
+    c.drawImage(ImageReader(_io.BytesIO(make_noisy_png(200, 120))), 100, 500, 300, 180)
+    c.drawImage(ImageReader(PILImage.new("RGB", (16, 16), "red")), 100, 450, 12, 12)  # an icon
+    c.drawString(72, 400, "A photo of the roof after the panels were fitted last spring.")
+    c.showPage()
+    c.save()
+    blocks = extract_pdf(tmp_path / "pictures.pdf").blocks
+    assert [type(b).__name__ for b in blocks] == ["Paragraph", "Image", "Paragraph"]
+
+
+def test_a_framed_box_keeps_its_text_and_gives_up_only_its_chart(tmp_path):
+    c = canvas.Canvas(str(tmp_path / "box.pdf"))
+    c.rect(60, 120, 490, 640)  # the box frame around everything
+    c.setFont("Helvetica", 11)
+    for i in range(4):
+        c.drawString(72, 740 - i * 14, SENTENCE)
+    draw_chart(c, 120, 420)
+    c.setFont("Helvetica", 11)
+    for i in range(4):
+        c.drawString(72, 360 - i * 14, SENTENCE)
+    c.showPage()
+    c.save()
+    blocks = extract_pdf(tmp_path / "box.pdf").blocks
+    assert [type(b).__name__ for b in blocks] == ["Paragraph", "Image", "Paragraph"]
+    assert blocks[0].text.count("morning") == 4 and blocks[2].text.count("morning") == 4
+
+
+def test_two_columns_are_read_left_then_right(tmp_path):
+    c = canvas.Canvas(str(tmp_path / "columns.pdf"))
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(72, 760, "Looking after a home solar system")  # a title over both columns
+    c.setFont("Helvetica", 10)
+    left = simpleSplit("Left column. " + BODY * 5, "Helvetica", 10, 220)
+    right = simpleSplit("Right column. " + BODY * 5, "Helvetica", 10, 220)
+    for i, (a, b) in enumerate(zip(left, right)):
+        c.drawString(72, 730 - i * 13, a)
+        c.drawString(320, 730 - i * 13, b)
+    c.showPage()
+    c.save()
+    texts = [b.text for b in extract_pdf(tmp_path / "columns.pdf").blocks]
+    assert texts[0] == "Looking after a home solar system"
+    assert texts[1].startswith("Left column.") and texts[2].startswith("Right column.")
+    assert "Right column" not in texts[1]
+
+
+def test_figures_reach_the_index_cited_by_their_own_page(tmp_path, settings):
+    path = tmp_path / "report.pdf"
+    c = canvas.Canvas(str(path))  # "Output" runs over two pages, with a chart on its first; then "Costs"
+    for title, chart in (("Output", True), (None, False), ("Costs", False)):
+        if title:
+            c.bookmarkPage(title, fit="XYZ", top=790)
+            c.addOutlineEntry(title, title, level=0)
+            c.setFont("Helvetica-Bold", 16)
+            c.drawString(72, 760, title)
+        c.setFont("Helvetica", 11)
+        for i, line in enumerate(simpleSplit(SENTENCE * 3, "Helvetica", 11, WIDTH)):
+            c.drawString(72, 730 - i * 14, line)
+        if chart:
+            draw_chart(c, 100, 420)
+        c.showPage()
+    c.save()
+    index = index_of(tmp_path, settings, path, small_sections="off")
+    output = index.root.children[0]
+    assert len(index.images) == 1 and output.location.label() == "pp. 1-2"
+    record = index.images[0]
+    assert record.node_id == output.id and record.location.label() == "p. 1"  # its own page, not the section's
+    assert record.mime == "image/png" and (tmp_path / "data" / "docs" / index.doc_id / record.file).is_file()

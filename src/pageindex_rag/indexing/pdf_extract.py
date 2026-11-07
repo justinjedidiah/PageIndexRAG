@@ -5,11 +5,15 @@ between them and by a change of look (size or bold). Each paragraph keeps its fo
 so the same structure detectors as for Word work on it (typed contents page, lines formatted like
 headings).
 
+Charts, ruled tables and pictures are found first and taken out of the text: a chart or picture
+becomes an image (that part of the page, rendered), a ruled table a Markdown table. Text is read in
+column order. See pdf_layout.py.
+
 Bookmarks (the outline panel of a PDF viewer) are the PDF's own outline: when they are believable,
 each becomes a heading, placed at the line on its page that carries its title, else where it points.
 
 Two libraries, both with permissive licences: pypdfium2 (bookmarks, printed page labels, page count,
-password check) and pdfplumber (text with fonts and positions).
+password check, rendering figures) and pdfplumber (text with fonts and positions, shapes, tables).
 """
 
 import re
@@ -22,6 +26,7 @@ import pypdfium2 as pdfium
 
 from ..models import TocEntry
 from .blocks import Block, DocumentRejected, Heading, Paragraph
+from .pdf_layout import PDFIUM_LOCK, Figure, find_figures, reading_lines, render_area
 
 BOLD_FONT = re.compile(r"bold|black|heavy|semibold|demibold", re.IGNORECASE)
 # Bookmarks some tools add that say nothing about the content: "Page 3", "12", "Untitled", "Bookmark 4".
@@ -32,6 +37,7 @@ MIN_TEXT_PER_PAGE = 20  # characters; fewer and the page counts as having no tex
 MARGIN = 0.1  # running headers and footers sit in the top or bottom tenth of the page
 RUNNING_MIN_PAGES = 3  # a margin line recurring on at least this many pages,
 RUNNING_MIN_SHARE = 0.2  # and on at least this share of them, is a running header or footer
+MAX_FIGURES = 300  # per document: charts, tables and pictures past this stay as text (or are skipped)
 PAGE_NUMBER = re.compile(r"^[\W#]*((page|p\.)\s*)?#(\s*(of|/)\s*#)?[\W#]*$", re.IGNORECASE)
 
 
@@ -73,36 +79,53 @@ class _Bookmark:
 def extract_pdf(path: Path | str, max_pages: int | None = None) -> PdfContent:
     """Read a PDF. Raises DocumentRejected for a password-protected, scanned or too long one."""
     path = Path(path)
+    with PDFIUM_LOCK:
+        try:
+            pdf = pdfium.PdfDocument(str(path))
+        except pdfium.PdfiumError as exc:
+            if "password" in str(exc).lower():
+                raise DocumentRejected("This PDF is password-protected. Remove the password and upload it again.") from exc
+            raise
     try:
-        pdf = pdfium.PdfDocument(str(path))
-    except pdfium.PdfiumError as exc:
-        if "password" in str(exc).lower():
-            raise DocumentRejected("This PDF is password-protected. Remove the password and upload it again.") from exc
-        raise
-    try:
-        count = len(pdf)
-        if max_pages and count > max_pages:
-            raise DocumentRejected(f"This PDF has {count:,} pages. The limit here is {max_pages:,}.")
-        labels = [pdf.get_page_label(i) or str(i + 1) for i in range(count)]
-        heights = [pdf.get_page_size(i)[1] for i in range(count)]
-        bookmarks = _bookmarks(pdf, heights)
-    finally:
-        pdf.close()
+        with PDFIUM_LOCK:
+            count = len(pdf)
+            if max_pages and count > max_pages:
+                raise DocumentRejected(f"This PDF has {count:,} pages. The limit here is {max_pages:,}.")
+            labels = [pdf.get_page_label(i) or str(i + 1) for i in range(count)]
+            heights = [pdf.get_page_size(i)[1] for i in range(count)]
+            bookmarks = _bookmarks(pdf, heights)
 
-    page_lines: list[list[_Line]] = []
-    with pdfplumber.open(path) as document:
-        for page in document.pages:
-            page_lines.append(_lines(page))
-            page.close()  # frees the page's parsed objects: long documents stay light on memory
+        page_lines: list[list[_Line]] = []
+        page_figures: list[list[Figure]] = []
+        budget = MAX_FIGURES
+        with pdfplumber.open(path) as document:
+            for number, page in enumerate(document.pages):
+                with PDFIUM_LOCK:
+                    pdf_page = pdf[number]
+                try:
+                    figures = find_figures(page, lambda box: render_area(pdf_page, box, heights[number]), budget)
+                    lines = reading_lines(page, figures)
+                finally:
+                    with PDFIUM_LOCK:
+                        pdf_page.close()
+                budget -= len(figures)
+                for figure in figures:
+                    figure.block.page = number
+                page_figures.append(figures)
+                page_lines.append(_lines(lines))
+                page.close()  # frees the page's parsed objects: long documents stay light on memory
+    finally:
+        with PDFIUM_LOCK:
+            pdf.close()
     _drop_running_lines(page_lines, heights)
     pages = [_paragraphs(lines) for lines in page_lines]
     _check_text_layer(pages)
 
     outline = _believable(bookmarks)
     blocks: list[Block] = []
-    for number, paragraphs in enumerate(pages):
+    for number, (paragraphs, figures) in enumerate(zip(pages, page_figures)):
         on_page = [b for b in outline if b.page == number] if outline else []
-        blocks.extend(_page_blocks(paragraphs, on_page, number))
+        blocks.extend(_page_blocks(paragraphs, figures, on_page, number))
     toc = [TocEntry(title=b.title, level=b.level, page=labels[b.page]) for b in outline] if outline else None
     return PdfContent(blocks=blocks, page_labels=labels, outline=toc)
 
@@ -110,9 +133,9 @@ def extract_pdf(path: Path | str, max_pages: int | None = None) -> PdfContent:
 # ---- text ----
 
 
-def _lines(page) -> list[_Line]:
+def _lines(raw: list[dict]) -> list[_Line]:
     lines = []
-    for line in page.extract_text_lines(return_chars=True, strip=True):
+    for line in raw:
         chars = [c for c in line["chars"] if c["text"].strip()]
         if not chars or not line["text"].strip():
             continue
@@ -229,12 +252,22 @@ def _believable(bookmarks: list[_Bookmark]) -> list[_Bookmark] | None:
     return usable
 
 
-def _page_blocks(paragraphs: list[_Para], bookmarks: list[_Bookmark], page: int) -> list[Block]:
-    """The page's paragraphs, with each bookmark's heading where its title is, else where it points."""
-    items: list[Block] = [
-        Paragraph(p.text, indent=p.x0, bold=p.bold, size=p.size, page=page) for p in paragraphs
-    ]
-    tops = [p.top for p in paragraphs]
+def _page_blocks(paragraphs: list[_Para], figures: list[Figure], bookmarks: list[_Bookmark], page: int) -> list[Block]:
+    """The page's paragraphs and figures in reading order, with each bookmark's heading where its title is,
+    else where it points. A figure goes before the first paragraph that starts below its top."""
+    items: list[Block] = []
+    tops: list[float] = []
+    pending = list(figures)
+    for p in paragraphs:
+        while pending and pending[0].top <= p.top:
+            figure = pending.pop(0)
+            items.append(figure.block)
+            tops.append(figure.top)
+        items.append(Paragraph(p.text, indent=p.x0, bold=p.bold, size=p.size, page=page))
+        tops.append(p.top)
+    for figure in pending:
+        items.append(figure.block)
+        tops.append(figure.top)
     for bookmark in bookmarks:
         heading = Heading(bookmark.level, bookmark.title, page=page)
         after = 0 if bookmark.top is None else next((i for i, top in enumerate(tops) if top >= bookmark.top - 5), len(tops))

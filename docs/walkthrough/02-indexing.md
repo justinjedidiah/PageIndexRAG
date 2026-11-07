@@ -1,6 +1,6 @@
 # 02. Indexing: from an uploaded file to a searchable tree
 
-Files covered: everything in `src/pageindex_rag/indexing/` (`docx_extract.py`, `pdf_extract.py`, `markdown_extract.py`, `tree.py`, `pages.py`, `refine.py`, `split.py`, `preview.py`, `options.py`, `estimate.py`, `summarize.py`, `pipeline.py`, `blocks.py` was in file 01).
+Files covered: everything in `src/pageindex_rag/indexing/` (`docx_extract.py`, `pdf_extract.py`, `pdf_layout.py`, `markdown_extract.py`, `tree.py`, `pages.py`, `refine.py`, `split.py`, `preview.py`, `options.py`, `estimate.py`, `summarize.py`, `pipeline.py`, `blocks.py` was in file 01).
 
 **Indexing** means turning a document into the tree of sections described in file 01, with a summary on every section. It happens once per document. Asking questions later only reads the result.
 
@@ -149,7 +149,26 @@ Before lines become paragraphs, `_drop_running_lines` removes **running headers 
 
 `pdf_cache.read_pdf` saves what was read as `<file>.read.json` next to the PDF: reading is the slow part (about 0.07 s a page, 21 s for 300 dense pages), and every change of a structure option, and "Index it" itself, rebuild the tree from the same file. The saved read sits in the visitor's own uploads folder, so it is deleted with the session; nothing is kept in shared memory. It is used only for the file beside it and only if the SHA-256 of that file's bytes (and the page limit and a format number) match the ones saved with it, so a changed file is always read again, and a damaged saved read is ignored. The app deletes it once the document is indexed, cancelled or refused (`pdf_cache.forget`).
 
-Not handled yet: text inside charts (axis labels and legends come through as text), multi-column order beyond "a new column starts a paragraph", tables (their rows come through as lines of text) and images.
+### `pdf_layout.py`: figures and columns
+
+Before any text is read, each page's **figures** are found (`find_figures`):
+
+- **Charts** in a PDF are usually vector drawings: hundreds of lines, rectangles and curves, with the axis labels and legends as loose text. Read as text they give rows like "25 0.0 40". So the drawn shapes (`page.rects + page.lines + page.curves`, minus page-sized backgrounds) are grouped: shapes within 14 points of each other belong together (`_clusters`), which also keeps the panels of one chart in one figure. A group of at least 8 shapes, at least 72 x 50 points, is a figure.
+- **Framed sections** ("Box A" with a border) are also groups of shapes, but they hold full sentences. `_drawn_areas` checks for body lines (8+ words at the page's main text size, `_body_lines`); if a group holds any, its frame (shapes running along 90% of its width or height) is peeled off and the inside is grouped again, so a chart inside a box is still found and the box's text stays text.
+- The figure's area is trimmed of prose lines at its top or bottom edge (`_trim_notes`: "1 See additional notes...", "Sources: ..."), grown over words within 8 points of its edge (`_take_labels`: units above the plot like "USD bn", axis labels), in one pass so it never creeps on to panel titles or notes, then padded by up to 6 points but never over other text (`_pad`).
+- A figure that is a **ruled table** (`_ruled_table`: pdfplumber's `find_tables` inside it finds at least 2 x 2 cells, 60% of them filled, and at least a fifth of the filled ones holding a word) becomes a `Table` in Markdown, like a Word table. A chart's gridlines also look like a table to `find_tables`, but their cells are empty or hold only axis numbers.
+- Anything else becomes an `Image`: `render_area` renders that part of the page with pdfium (like a screenshot, at up to 3x, longest side 1568 pixels) to PNG. This handles every way a PDF stores pictures, and it keeps a chart whole, legend included, so the vision model can describe it (Full preset) and answers can show it.
+- **Embedded pictures** (`page.images`) are cut out the same way. Skipped: a side under 32 pixels or 24 points (icons, rules), anything covering 80% of the page (a background), and anything inside a chart already taken.
+
+At most 300 figures per document (`MAX_FIGURES`); the text inside every figure is left out of the text (`reading_lines` filters out characters whose centre is inside one). A figure goes into the block list before the first paragraph that starts below its top. In the index, a figure is cited by its own page (`pipeline._cite_image_pages`), not its section's whole range.
+
+**Columns** (`_column_gap`): the page's words are scanned for a vertical gap in the middle 40% of the page that is at least 8 points wide, crossed by no more than a tenth of the text rows (a title over both columns; in a single column almost every row crosses the middle), with at least a quarter of the words on each side, in rows of running text (5+ words a row on average: a list of country codes in columns reads better row by row). With a gap, the page is cut into horizontal bands (`_bands`): rows crossing the gap are read across, and each band between them is read left column first, then right.
+
+pdfium is not safe to call from two threads at once, and documents are read in worker threads, so every pdfium call goes through `PDFIUM_LOCK`.
+
+Reading time on a real 133-page report with about 50 charts: about 37 seconds (text alone was about 20). The saved read (below) means it happens once per upload.
+
+Not handled: tables drawn without lines (their rows stay lines of text), and charts drawn as one embedded picture with text on top (the picture is cut out; the text stays text).
 
 ### `markdown_extract.py` (developer use only)
 

@@ -18,7 +18,7 @@ from ..models import TocEntry
 from .blocks import Block, Heading, Image, Paragraph, Table, TocLine
 from .pdf_extract import PdfContent, extract_pdf
 
-FORMAT = 1  # bump when the saved shape or the reading changes, so old files are read again
+FORMAT = 2  # bump when the saved shape or the reading changes, so old files are read again
 
 
 def saved_read_path(path: Path) -> Path:
