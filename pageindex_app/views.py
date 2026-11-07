@@ -4,6 +4,8 @@ import reflex as rx
 
 from pageindex_rag.providers import PROVIDERS
 
+from pageindex_rag.sessions import describe_duration
+
 from .runtime import settings
 from .state import MAX_LEAF_CHOICES, MIN_LEAF_CHOICES, UPLOAD_ID, State
 from .viewmodels import ChatMessage, CitationView, DocView, ImageView, OutlineRowView, PresetView, StepView
@@ -200,7 +202,6 @@ def library_card() -> rx.Component:
                 rx.vstack(rx.foreach(State.docs, doc_row), spacing="0", width="100%"),
                 rx.text("No documents yet.", **MUTED),
             ),
-            rx.text(State.session_note, **MUTED),
             spacing="2",
             align="start",
             width="100%",
@@ -737,6 +738,31 @@ def source_panel() -> rx.Component:
 # ---- page ----
 
 
+def session_timer() -> rx.Component:
+    """How long until this visitor's uploads are deleted: a live countdown once a session exists."""
+    return rx.cond(
+        State.session_expires_at > 0,
+        rx.hstack(
+            rx.icon("timer", size=14, color="var(--gray-10)"),
+            rx.text("Uploads deleted in ", size="1", color_scheme="gray"),
+            rx.el.span(
+                id="session-countdown",
+                custom_attrs={"data-expires-at": State.session_expires_at},
+                style={"font_variant_numeric": "tabular-nums", "font_size": "var(--font-size-1)", "font_weight": "500"},
+            ),
+            spacing="1",
+            align="center",
+            title="Everything you add is deleted when this reaches zero, or when you end the session.",
+        ),
+        rx.text(
+            f"Uploads are kept for {describe_duration(settings.session_ttl_seconds)}",
+            size="1",
+            color_scheme="gray",
+            title="The timer starts when you add your first document.",
+        ),
+    )
+
+
 def header() -> rx.Component:
     return rx.hstack(
         rx.center(rx.icon("book-open-text", size=18), width="36px", height="36px", border=BORDER, border_radius="10px", background=SURFACE),
@@ -747,6 +773,7 @@ def header() -> rx.Component:
             align="start",
         ),
         rx.spacer(),
+        session_timer(),
         rx.button(
             rx.icon("trash-2", size=14),
             "End session and delete my data",

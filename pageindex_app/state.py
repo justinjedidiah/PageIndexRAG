@@ -31,7 +31,6 @@ from pageindex_rag.library import SAMPLE_SCOPE, Library
 from pageindex_rag.providers import PROVIDER_IDS, PROVIDERS, LLMConfig, list_models
 from pageindex_rag.models import DocumentIndex, IndexOptions
 from pageindex_rag.outline import node_markdown, outline_rows
-from pageindex_rag.sessions import describe_duration
 from pageindex_rag.uploads import UploadError, safe_filename, validate_upload
 
 from .runtime import sessions, settings
@@ -70,6 +69,33 @@ def pending_path(token: str) -> Path:
     return sessions.session_dir(token) / "pending.json"
 
 
+# Counts down every element with a data-expires-at attribute (seconds since 1970) as h:mm:ss, in the browser,
+# so the timer ticks without any traffic to the server. React leaves the text alone: the element has no children.
+COUNTDOWN_SCRIPT = """
+(function () {
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function tick() {
+    document.querySelectorAll('[data-expires-at]').forEach(function (el) {
+      var end = parseFloat(el.getAttribute('data-expires-at')) * 1000;
+      var left = end ? Math.max(0, Math.floor((end - Date.now()) / 1000)) : 0;
+      var text = !end ? '' : left > 0
+        ? Math.floor(left / 3600) + ':' + pad(Math.floor(left % 3600 / 60)) + ':' + pad(left % 60)
+        : 'now (refresh the page)';
+      // Only write when it changed: writing is itself a change the observer below sees, so writing the same
+      // text every time would make the page update itself endlessly.
+      if (el.textContent !== text) { el.textContent = text; }
+    });
+  }
+  if (!window.__sessionCountdown) {
+    window.__sessionCountdown = setInterval(tick, 1000);
+    // Also update at once when a timer appears or its end time changes, so it is never blank for a second.
+    new MutationObserver(tick).observe(document.body, {subtree: true, childList: true, attributes: true, attributeFilter: ['data-expires-at']});
+  }
+  tick();
+})();
+"""
+
+
 def scroll_chat(force: bool = False) -> rx.event.EventSpec:
     """Keep the newest text in view, but only if the visitor is already near the bottom.
 
@@ -101,7 +127,9 @@ class State(rx.State):
 
     docs: list[DocView] = []
     has_samples: bool = False
-    session_note: str = ""
+    # When this visitor's uploads are deleted (seconds since 1970), or 0 before the first upload.
+    # The page counts down to it in the browser; the server only sends the time once.
+    session_expires_at: float = 0
 
     messages: list[ChatMessage] = []  # finished messages only; changes once per question and once per answer
     thinking: bool = False
@@ -227,11 +255,7 @@ class State(rx.State):
         self.docs = [DocView(d.doc_id, d.title, d.kind, d.summary, d.sample) for d in docs]
         self.has_samples = any(d.sample for d in docs)
         session = sessions.get(self._token())
-        if session:
-            self.session_note = f"Your uploads are deleted automatically in {describe_duration(session.expires_at - time.time())}."
-        else:
-            hours = describe_duration(settings.session_ttl_seconds)
-            self.session_note = f"Your uploads are deleted automatically {hours} after you add the first one."
+        self.session_expires_at = session.expires_at if session else 0
 
     def _clear_pending(self, delete_files: bool) -> None:
         if delete_files and self._pending_id:
@@ -370,6 +394,7 @@ class State(rx.State):
     def on_load(self):
         self._restore_pending()
         self._refresh()
+        return rx.call_script(COUNTDOWN_SCRIPT)  # starts the session timer in the browser (once per page)
 
     @rx.event
     def end_session(self):

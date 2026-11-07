@@ -10,6 +10,7 @@ installed and the dev extras (playwright). Not collected by pytest: it is slow a
 import contextlib
 import io
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -177,6 +178,7 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
             expect(page.get_by_text("PageIndex RAG").first).to_be_visible(timeout=30000)
             expect(page.get_by_text("sample", exact=True)).to_have_count(3, timeout=15000)
             expect(page.get_by_placeholder("Add your API key to chat")).to_be_disabled()
+            expect(page.get_by_text("Uploads are kept for 2 hours")).to_be_visible()  # no session yet
 
         step("page loads with 3 sample documents and chat locked", loads, "01-loaded.png")
 
@@ -221,6 +223,16 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
             expect(page.get_by_text("Heron Notes").first).to_be_visible(timeout=15000)
 
         step("the Free preset indexes a heading-less docx without a key", free_without_key, "02b-free.png")
+
+        def session_countdown() -> None:
+            # Before the first upload there was no session; now the header counts down to its end, in the browser.
+            countdown = page.locator("#session-countdown")
+            expect(countdown).to_have_text(re.compile(r"^1:59:[0-5]\d$"), timeout=1500)  # shown at once, not after a tick
+            first = countdown.inner_text()
+            page.wait_for_timeout(2200)
+            assert countdown.inner_text() < first, f"the countdown did not tick: {first!r} -> {countdown.inner_text()!r}"
+
+        step("the header counts down to the end of the session", session_countdown)
 
         def browse_free() -> None:
             page.get_by_role("button", name="Browse").last.click()  # samples come first; Heron Notes is the only upload

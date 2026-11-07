@@ -70,7 +70,7 @@ Library: a root node whose children are documents, each with a one-paragraph sum
 
 ## Staging
 1. Library-level agent (done)
-2. Reflex app: BYOK key entry, upload and background indexing with cost estimate, chat with live path, citations, source panel, images, sample library (Word/Markdown). Built and verified end to end in real Chrome with an offline fake model (`tests/e2e/run_e2e.py`, 33 checks). Not yet tried with a real Anthropic key. Needs Node 22.22 or newer (Reflex 0.10)
+2. Reflex app: BYOK key entry, upload and background indexing with cost estimate, chat with live path, citations, source panel, images, sample library (Word/Markdown). Built and verified end to end in real Chrome with an offline fake model (`tests/e2e/run_e2e.py`, 34 checks). Not yet tried with a real Anthropic key. Needs Node 22.22 or newer (Reflex 0.10)
 3. Tree refinement and indexing options (done): split / merge / fold, presets Free / Budget / Full with live cost estimates, free previews, multi-level agent listings. `samples/index` is rebuilt with it (Full preset, real key).
 4. Model providers (done): Anthropic, OpenAI and Google Gemini keys, provider picker, both models chosen by the visitor from the key's live model list (no defaults). Verified with unit tests and the offline model; not yet run against real OpenAI or Gemini models.
 5. PDF: bookmarks, then printed ToC, then heading heuristics, then LLM-generated structure; page ranges and page-image source view. LLM-generated ToC (off / only when missing / always) comes with this stage, for Word too.
