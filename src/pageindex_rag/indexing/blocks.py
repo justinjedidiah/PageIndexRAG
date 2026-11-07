@@ -1,7 +1,7 @@
 """Flat content blocks that every extractor produces, in document order."""
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -13,6 +13,9 @@ class Heading:
 @dataclass
 class Paragraph:
     text: str
+    # How far the paragraph starts from the left margin, in points (its indent plus leading tabs or spaces).
+    # Only used to read the levels of a typed table of contents; never compared for anything else.
+    indent: float = field(default=0, compare=False)
 
 
 @dataclass

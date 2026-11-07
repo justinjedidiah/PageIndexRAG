@@ -843,6 +843,7 @@ def _estimate_key(options: IndexOptions) -> str:
 # Shown above a document's outline, so a flat outline explains itself.
 STRUCTURE_NOTES = {
     "headings": "Outline from the document's headings.",
+    "typed_toc": "Outline from the document's contents page (it has no headings).",
     "none": "No headings found in this document, so its text is split into parts by size.",
 }
 

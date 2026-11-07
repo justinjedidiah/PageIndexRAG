@@ -72,7 +72,7 @@ def _read_paragraph(element, doc: DocxDocument, blocks: list[Block], in_toc: boo
             blocks.append(entry)
         return
     level = _outline_level(paragraph)
-    blocks.append(Heading(level, text) if level else Paragraph(text))
+    blocks.append(Heading(level, text) if level else Paragraph(text, indent=_indent(paragraph, paragraph_text(element))))
 
 
 def paragraph_text(element) -> str:
@@ -97,6 +97,16 @@ def paragraph_text(element) -> str:
 
     visit(element)
     return "".join(parts)
+
+
+def _indent(paragraph: DocxParagraph, raw_text: str) -> float:
+    """Points from the left margin: the paragraph's own left indent, plus leading tabs and spaces typed in it."""
+    try:
+        left = paragraph.paragraph_format.left_indent
+    except (ValueError, TypeError):  # a malformed value in the file
+        left = None
+    leading = raw_text[: len(raw_text) - len(raw_text.lstrip())]
+    return (left.pt if left is not None else 0) + 36 * leading.count("	") + 4 * leading.count(" ")
 
 
 def _toc_level(paragraph: DocxParagraph) -> int | None:

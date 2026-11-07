@@ -64,7 +64,20 @@ This is the key to "Word has a ready-made structure". Word gives each paragraph 
 
 A table of contents inserted by Word (References > Table of Contents) sits in a content control marked "Table of Contents" (`_is_toc_control`), and its entries use the styles "toc 1", "toc 2"... (or just those style ids). Each entry becomes a `TocLine(level, title, page)`: "Installation⇥12" gives title "Installation", page "12". The box's own title ("Contents", which has no page number) is dropped. The tree builder skips `TocLine` blocks, so the ToC never ends up as text; the pipeline keeps the entries as the document's own ToC (`source_toc`, with pages). The ToC is not used to build the tree: it was generated *from* the headings, which already give the outline with exact positions.
 
-`build_index` records where the tree came from in `structure_source`: `"headings"`, or `"none"` when the document has none (its text is then cut by size). The Browse panel and `pageindex tree` show it, so a flat outline explains itself.
+**A typed contents page** (`typed_toc.py`)
+
+Many documents have a contents page typed by hand ("Installation ........ 12") and no heading styles. `apply_typed_toc` runs on the extracted blocks right after extraction, so it works the same for any file type:
+
+1. **Find it.** Near the start (within the first fifth of the document, or the first 40 blocks), a run of at least 3 lines that each end in a page number after a tab, dot leaders or a gap; roman page numbers count. A line without a page number followed by one with joins it (a wrapped title). A "Contents" line just above is removed with it.
+2. **Levels.** From numbering if most entries are numbered ("1.2" is level 2), else from indentation (the `indent` the Word reader records: the paragraph's left indent plus leading tabs or spaces), else all level 1.
+3. **Find each entry in the body, in order**, searching forward from the last one found: a paragraph of at most 150 characters with the same text, ignoring case, punctuation and leading numbering ("1 Getting started" matches "Getting started"). Searching in order keeps a sentence that only mentions a title, or a second section with the same name, from being taken for it. Page numbers are ignored: a .docx has no fixed pages.
+4. **Trust it** only if at least 2 entries, and at least half of them, were found. A price list ("Panel ..... 200") or a contents page too out of date to follow fails this, and nothing changes.
+
+A **list of figures or tables** looks just like a contents page but points at captions, so a run under such a title is skipped, and so are entries that start with "Figure" or "Table".
+
+A trusted contents page is removed from the text and its entries kept as `TocLine` blocks (unless Word's own ToC is already kept). If the document **has headings**, that is all: the headings still build the outline. If it **has none**, the paragraphs the entries point to become `Heading` blocks at the entries' levels, and the contents page has built the outline.
+
+`build_index` records where the tree came from in `structure_source`: `"headings"`, `"typed_toc"`, or `"none"` when neither gave one (the text is then cut by size). The Browse panel and `pageindex tree` show it, so a flat outline explains itself.
 
 **Images**
 
@@ -543,7 +556,7 @@ Used by the command line, the sample builder and the tests. The web page calls t
 
 ## Things that are not built, or limited
 
-1. **A Word file without headings (no outline levels) gets no real structure.** Headings formatted by hand (bold, bigger, numbered) and typed contents pages are not used yet; both are planned next. All its text lands under the root and is only cut by size into balanced parts (one level, titled by their first sentence). The design intends to have Claude *generate* a table of contents for such files, and optionally pick topic boundaries when splitting; **neither is implemented yet**. Both are planned together with PDF.
+1. **A Word file without headings (no outline levels) gets no real structure.** A typed contents page is used if it has one (see above); headings formatted by hand (bold, bigger, numbered) are not used yet, and are planned next. All its text lands under the root and is only cut by size into balanced parts (one level, titled by their first sentence). The design intends to have Claude *generate* a table of contents for such files, and optionally pick topic boundaries when splitting; **neither is implemented yet**. Both are planned together with PDF.
 2. **PDF reading does not exist** (`NotImplementedError`, see above).
 3. Word features that are ignored: headers and footers, footnotes, text boxes, nested tables, content controls inside table cells. Merged table cells may repeat their text.
 4. The token estimate is a rough rule (characters / 4).

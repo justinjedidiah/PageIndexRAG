@@ -86,6 +86,7 @@ def main(argv: list[str] | None = None) -> None:
 
 STRUCTURE_NOTES = {
     "headings": "from the document's headings",
+    "typed_toc": "from the document's typed contents page (it has no headings)",
     "none": "no headings found, so the text is split into parts by size",
 }
 
