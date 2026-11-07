@@ -41,7 +41,9 @@ def prose(text: rx.Var[str]) -> rx.Component:
     A memo component, not a plain function: Reflex's markdown element calls a hook while it is
     built, and that is only valid inside a component of its own, never in a list or a condition.
     """
-    return rx.box(rx.markdown(text), style=PROSE_STYLE)
+    # No maths: "$34 billion ... $10 billion" is money, not a formula. No raw HTML: document text and model
+    # answers are untrusted, so HTML in them shows as text instead of becoming part of the page.
+    return rx.box(rx.markdown(text, use_math=False, use_katex=False, use_raw=False), style=PROSE_STYLE)
 
 
 # ---- sidebar ----
