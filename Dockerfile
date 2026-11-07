@@ -16,11 +16,13 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl unzip ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# The package is installed into site-packages, so it cannot find samples/ next to its own code: name the folder.
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     TELEMETRY_ENABLED=false \
-    PORT=8000
+    PORT=8000 \
+    TOC_RAG_SAMPLES_DIR=/app/samples/index
 
 RUN useradd --create-home --uid 1000 app \
     && mkdir /app && chown app:app /app
