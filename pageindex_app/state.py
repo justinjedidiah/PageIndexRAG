@@ -69,18 +69,16 @@ def pending_path(token: str) -> Path:
     return sessions.session_dir(token) / "pending.json"
 
 
-# Counts down every element with a data-expires-at attribute (seconds since 1970) in hours and minutes, in the browser,
+# Counts down every element with a data-expires-at attribute (seconds since 1970) in whole hours, then minutes, in the browser,
 # so the timer ticks without any traffic to the server. React leaves the text alone: the element has no children.
 COUNTDOWN_SCRIPT = """
 (function () {
-  // "1 h 59 min", "59 min", "under a minute": minutes are enough for a 2-hour limit.
+  // Whole hours, rounded up, while an hour or more is left ("2 hours"); then minutes ("59 min").
   function describe(left) {
     if (left <= 0) { return 'now (refresh the page)'; }
     if (left < 60) { return 'under a minute'; }
-    var hours = Math.floor(left / 3600), minutes = Math.floor(left % 3600 / 60), parts = [];
-    if (hours) { parts.push(hours + ' h'); }
-    if (minutes || !hours) { parts.push(minutes + ' min'); }
-    return parts.join(' ');
+    if (left >= 3600) { var hours = Math.ceil(left / 3600); return hours + (hours === 1 ? ' hour' : ' hours'); }
+    return Math.floor(left / 60) + ' min';
   }
   function tick() {
     document.querySelectorAll('[data-expires-at]').forEach(function (el) {
