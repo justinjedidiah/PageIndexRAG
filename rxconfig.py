@@ -32,6 +32,20 @@ def _keep_data_out_of_hot_reload() -> None:
 
 _keep_data_out_of_hot_reload()
 
+
+def _public_address() -> dict[str, str]:
+    """The address the page uses to reach the backend, when deployed.
+
+    In production the frontend is built with this address in it, so it must be the app's public
+    address, not localhost. Set API_URL to it on any host; Reflex reads that variable itself. On
+    Railway, if API_URL is not set, it is taken from the public domain Railway provides.
+    """
+    if os.getenv("API_URL") or os.getenv("REFLEX_API_URL"):
+        return {}
+    domain = os.getenv("RAILWAY_PUBLIC_DOMAIN")
+    return {"api_url": f"https://{domain}", "deploy_url": f"https://{domain}"} if domain else {}
+
+
 config = rx.Config(
     app_name="pageindex_app",
     plugins=[
@@ -40,4 +54,5 @@ config = rx.Config(
         )
     ],
     disable_plugins=[rx.plugins.SitemapPlugin],
+    **_public_address(),
 )

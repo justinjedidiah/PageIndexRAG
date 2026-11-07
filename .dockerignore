@@ -1,0 +1,21 @@
+# Secrets: never in the image. (The app uses each visitor's own key.)
+.env
+.env.*
+!.env.example
+
+# Local environments, builds and runtime data
+.git
+.venv
+.web
+.states
+data
+uploaded_files
+__pycache__
+*.py[cod]
+*.egg-info
+.pytest_cache
+.vscode
+
+# Not needed to run the app
+tests
+docs
