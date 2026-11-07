@@ -217,12 +217,11 @@ except Exception as exc:
 else:
     self._api_key, self.key_set = key, True
     self.models = models
-    self.index_model = default_model(models, info.index_model)
-    self.agent_model = default_model(models, info.agent_model)
+    self.index_model = self.agent_model = ""     # nothing pre-selected: the visitor picks both
 finally:
     self.key_checking = False
 ```
-`form_data` is the submitted form as a dictionary (the input was named `api_key`). The bare `yield` **pushes the current changes to the page immediately** (so the "Use" button shows its spinner) before the slow part. Listing the models is a network call, so it runs on a helper thread (`asyncio.to_thread`) to avoid freezing the server. Outcomes: an error becomes a friendly message naming the provider (never the raw text); success stores the key in the backend variable, sets `key_set`, keeps the list of models this key can use, and picks the provider's default models when the key has them. The card then shows "OpenAI key set" and two dropdowns filled from `models`: **Model for indexing** and **Model for chat** (`set_index_model`, `set_agent_model`). `_llm()` bundles provider, key and models into an `LLMConfig` for each indexing run and each answer. `try/except/else/finally`: `else` runs only if nothing was raised; `finally` always runs.
+`form_data` is the submitted form as a dictionary (the input was named `api_key`). The bare `yield` **pushes the current changes to the page immediately** (so the "Use" button shows its spinner) before the slow part. Listing the models is a network call, so it runs on a helper thread (`asyncio.to_thread`) to avoid freezing the server. Outcomes: an error becomes a friendly message naming the provider (never the raw text); success stores the key in the backend variable, sets `key_set` and keeps the list of models this key can use. The card then shows "OpenAI key set" and two dropdowns filled from `models`, both starting at "Choose a model": **Model for indexing** and **Model for chat** (`set_index_model`, `set_agent_model`). Nothing is pre-selected. `can_chat` waits for a chat model, and `chat_hint` / `index_hint` say what is missing (a key, a chat model, an indexing model unless the Free preset is chosen). `_llm()` bundles provider, key and models into an `LLMConfig` for each indexing run and each answer. `try/except/else/finally`: `else` runs only if nothing was raised; `finally` always runs.
 
 **`clear_key`**: forgets the key and its model list (`_forget_key`).
 

@@ -28,7 +28,7 @@ from pageindex_rag.indexing.estimate import count_describable_images
 from pageindex_rag.indexing.options import PRESET_DESCRIPTIONS, PRESET_LABELS, matching_preset, preset_options
 from pageindex_rag.indexing.pipeline import make_doc_id
 from pageindex_rag.library import SAMPLE_SCOPE, Library
-from pageindex_rag.providers import PROVIDER_IDS, PROVIDERS, LLMConfig, default_model, list_models
+from pageindex_rag.providers import PROVIDER_IDS, PROVIDERS, LLMConfig, list_models
 from pageindex_rag.models import DocumentIndex, IndexOptions
 from pageindex_rag.outline import node_markdown, outline_rows
 from pageindex_rag.sessions import describe_duration
@@ -93,7 +93,8 @@ class State(rx.State):
     key_error: str = ""
     key_checking: bool = False
     # The chat models this key can use, listed by the provider when the key was checked, and the
-    # visitor's choice for indexing (summaries and images) and for the chat agent.
+    # visitor's choice for indexing (summaries and images) and for the chat agent. Nothing is
+    # pre-selected: the visitor picks both ("" until then).
     models: list[str] = []
     index_model: str = ""
     agent_model: str = ""
@@ -155,7 +156,27 @@ class State(rx.State):
 
     @rx.var
     def can_chat(self) -> bool:
-        return self.key_set and bool(self.docs) and not self.thinking
+        return self.key_set and self.agent_model != "" and bool(self.docs) and not self.thinking
+
+    @rx.var
+    def chat_hint(self) -> str:
+        """What is missing before chatting, or "" when nothing is."""
+        if not self.key_set:
+            return "Add your API key to start chatting. You can browse the samples without one."
+        if not self.agent_model:
+            return "Choose a model for chat (under your API key) to start chatting."
+        return ""
+
+    @rx.var
+    def index_hint(self) -> str:
+        """Why "Index it" is not available with the chosen options, or "" when it is."""
+        if not (self.opt_summaries == "llm" or self.opt_images):
+            return ""
+        if not self.key_set:
+            return "These options use your API key: add it above, or pick Free."
+        if not self.index_model:
+            return "Choose a model for indexing above, or pick Free."
+        return ""
 
     @rx.var
     def index_percent(self) -> int:
@@ -390,8 +411,8 @@ class State(rx.State):
                 self._api_key = key
                 self.key_set = True
                 self.models = models
-                self.index_model = default_model(models, info.index_model)
-                self.agent_model = default_model(models, info.agent_model)
+                self.index_model = ""
+                self.agent_model = ""
         finally:
             self.key_checking = False
 
@@ -546,6 +567,9 @@ class State(rx.State):
             if options.uses_llm and not self.key_set:
                 self.upload_error = "Add your API key first, or choose the Free preset (it needs no key)."
                 return
+            if options.uses_llm and not self.index_model:
+                self.upload_error = "Choose a model for indexing first, or choose the Free preset."
+                return
             llm, token = self._llm(), self._token()
             source = sessions.uploads_dir(token) / self._pending_file
             index = self._load_pending()
@@ -676,7 +700,7 @@ class State(rx.State):
         if not question:
             return
         async with self:
-            if self.thinking or not self.key_set:
+            if self.thinking or not self.key_set or not self.agent_model:
                 return
             llm, token = self._llm(), self._token()
             chat_settings = dataclasses.replace(settings, agent_listing_depth=int(self.listing_depth))

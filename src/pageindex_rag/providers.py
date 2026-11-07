@@ -1,12 +1,12 @@
 """The model providers a visitor can bring a key for: Anthropic, OpenAI and Google Gemini.
 
-Everything provider-specific lives here: how to build a chat model, which models are the defaults,
-and how to list the models a key can use. The rest of the code works through LangChain's common
-interface (tool calls, structured output, image input) and an `LLMConfig`.
+Everything provider-specific lives here: how to build a chat model and how to list the models a
+key can use. The rest of the code works through LangChain's common interface (tool calls,
+structured output, image input) and an `LLMConfig`.
 
-Model lists change every few months, so the app does not hard-code them: after a key is checked,
-`list_models` asks the provider which models that key can use, and the visitor chooses from that.
-The defaults below are only the first choice when they are in that list.
+Model lists change every few months, so the app names no models at all: after a key is checked,
+`list_models` asks the provider which models that key can use, and the visitor chooses from that
+list. The dev CLI takes its models from the environment.
 """
 
 from __future__ import annotations
@@ -35,8 +35,6 @@ class ProviderInfo:
     key_placeholder: str
     key_url: str  # where a visitor gets a key
     key_env: str  # the environment variable LangChain reads when no key is passed (dev and CLI only)
-    index_model: str  # default for summaries and image descriptions: small and cheap
-    agent_model: str  # default for the chat agent: stronger
     # Tight output caps are only used where the model does not spend output tokens on hidden reasoning
     # before answering; elsewhere a small cap could leave no room for the answer itself.
     small_caps: bool = False
@@ -45,18 +43,20 @@ class ProviderInfo:
 PROVIDERS: dict[Provider, ProviderInfo] = {
     "anthropic": ProviderInfo(
         "anthropic", "Anthropic", "sk-ant-...", "https://console.anthropic.com/settings/keys", "ANTHROPIC_API_KEY",
-        index_model="claude-haiku-5-5", agent_model="claude-sonnet-5-5", small_caps=True,
+        small_caps=True,
     ),
     "openai": ProviderInfo(
         "openai", "OpenAI", "sk-...", "https://platform.openai.com/api-keys", "OPENAI_API_KEY",
-        index_model="gpt-6-luna", agent_model="gpt-6.1-sol",
     ),
     "google": ProviderInfo(
         "google", "Google Gemini", "AIza...", "https://aistudio.google.com/apikey", "GOOGLE_API_KEY",
-        index_model="gemini-3.5-flash-lite", agent_model="gemini-3.6-flash",
     ),
 }
 LARGE_OUTPUT_CAP = 4096  # output cap where small_caps is False
+
+
+class NoModelChosen(ValueError):
+    """A model call was asked for before a model was chosen."""
 
 
 @dataclass(frozen=True)
@@ -68,16 +68,13 @@ class LLMConfig:
 
     provider: Provider = "anthropic"
     api_key: str | None = field(default=None, repr=False)  # repr=False: a printed config never shows the key
-    index_model: str = ""
-    vision_model: str = ""
-    agent_model: str = ""
+    index_model: str = ""  # summaries and image descriptions; empty until chosen
+    vision_model: str = ""  # empty means the index model
+    agent_model: str = ""  # the chat agent; empty until chosen
 
     def __post_init__(self) -> None:
         if self.provider not in PROVIDERS:
             raise ValueError(f"Unknown provider {self.provider!r}. Choose one of: {', '.join(PROVIDER_IDS)}.")
-        info = PROVIDERS[self.provider]
-        object.__setattr__(self, "index_model", self.index_model or info.index_model)
-        object.__setattr__(self, "agent_model", self.agent_model or info.agent_model)
         object.__setattr__(self, "vision_model", self.vision_model or self.index_model)
 
     @property
@@ -94,6 +91,8 @@ class LLMConfig:
 
 def chat_model(config: LLMConfig, model: str, max_tokens: int = 2048) -> BaseChatModel:
     """A LangChain chat model for this provider. `PAGEINDEX_LLM_FACTORY` swaps in an offline model for tests."""
+    if not model:
+        raise NoModelChosen("No model chosen. Pick one in the app, or set PAGEINDEX_INDEX_MODEL / PAGEINDEX_AGENT_MODEL.")
     factory = os.getenv("PAGEINDEX_LLM_FACTORY")  # "package.module:function"
     if factory:
         module_name, _, function = factory.partition(":")
@@ -122,8 +121,7 @@ def list_models(provider: Provider, api_key: str) -> list[str]:
         module = importlib.import_module(factory.partition(":")[0])
         if hasattr(module, "list_models"):
             return module.list_models(provider, api_key)
-        info = PROVIDERS[provider]
-        return sorted({info.index_model, info.agent_model})
+        return [f"{provider}-offline-model"]
     if provider == "anthropic":
         import anthropic
 
@@ -144,7 +142,3 @@ def list_models(provider: Provider, api_key: str) -> list[str]:
         ids = [i for i in ids if i.startswith("gemini-")]
     return sorted({i for i in ids if not any(word in i for word in _NOT_CHAT)})
 
-
-def default_model(models: list[str], preferred: str) -> str:
-    """The preferred model if this key has it, else the first one listed (or the preferred name if none are)."""
-    return preferred if preferred in models or not models else models[0]

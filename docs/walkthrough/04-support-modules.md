@@ -40,7 +40,7 @@ def get_settings() -> Settings:
     return Settings(
         data_dir=Path(os.getenv("PAGEINDEX_DATA_DIR", "data")),
         provider=provider,                       # PAGEINDEX_PROVIDER, default "anthropic"
-        index_model=os.getenv("PAGEINDEX_INDEX_MODEL", defaults.index_model),   # defaults follow the provider
+        index_model=os.getenv("PAGEINDEX_INDEX_MODEL", ""),   # no default models: the CLI must name them
         ...
 ```
 
@@ -51,9 +51,9 @@ def get_settings() -> Settings:
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GOOGLE_API_KEY` | none | Only for the command line and sample building. **Never** set on a public server. |
 | `PAGEINDEX_PROVIDER` | `anthropic` | Provider for the CLI: `anthropic`, `openai` or `google`. The web app uses each visitor's choice. |
 | `PAGEINDEX_DATA_DIR` | `data` | Where files are stored. Relative to the folder you run from. |
-| `PAGEINDEX_INDEX_MODEL` | the provider's (e.g. `claude-haiku-5-5`) | Writes section summaries |
+| `PAGEINDEX_INDEX_MODEL` | none (required by the CLI to index with an LLM) | Writes section summaries |
 | `PAGEINDEX_VISION_MODEL` | the index model | Describes images |
-| `PAGEINDEX_AGENT_MODEL` | the provider's (e.g. `claude-sonnet-5-5`) | Navigates and answers |
+| `PAGEINDEX_AGENT_MODEL` | none (required by `pageindex ask`) | Navigates and answers; must support tool calling |
 | `PAGEINDEX_MAX_LEAF_TOKENS` | 2000 | Sections bigger than this get split |
 | `PAGEINDEX_AGENT_MAX_STEPS` | 15 | Agent step budget |
 | `PAGEINDEX_SESSION_TTL_SECONDS` | 7200 | Session lifetime (2 hours) |
@@ -73,32 +73,31 @@ Everything that differs between model providers lives in this one file; the rest
 
 ```python
 PROVIDERS = {
-    "anthropic": ProviderInfo("anthropic", "Anthropic", "sk-ant-...", <key page>, "ANTHROPIC_API_KEY",
-                              index_model="claude-haiku-5-5", agent_model="claude-sonnet-5-5", small_caps=True),
-    "openai": ProviderInfo(..., index_model="gpt-6-luna", agent_model="gpt-6.1-sol"),
-    "google": ProviderInfo(..., index_model="gemini-3.5-flash-lite", agent_model="gemini-3.6-flash"),
+    "anthropic": ProviderInfo("anthropic", "Anthropic", "sk-ant-...", <key page>, "ANTHROPIC_API_KEY", small_caps=True),
+    "openai": ProviderInfo("openai", "OpenAI", "sk-...", <key page>, "OPENAI_API_KEY"),
+    "google": ProviderInfo("google", "Google Gemini", "AIza...", <key page>, "GOOGLE_API_KEY"),
 }
 ```
 
-A `ProviderInfo` per provider: its name, what its keys look like (the key box's hint), where to get a key, the environment variable LangChain falls back to, and the **default** models for the two roles: a small, cheap one for indexing (summaries, image descriptions) and a stronger one for the chat agent. These defaults are only a first choice (see `list_models`).
+A `ProviderInfo` per provider: its name, what its keys look like (the key box's hint), where to get a key, and the environment variable LangChain falls back to. It names **no models**: model lineups change every few months, so the visitor picks both models from the list their key can use (see `list_models`), and the dev CLI reads them from `.env`.
 
 ```python
 @dataclass(frozen=True)
 class LLMConfig:
     provider: Provider = "anthropic"
     api_key: str | None = field(default=None, repr=False)
-    index_model: str = ""      # empty -> the provider's default
+    index_model: str = ""      # empty until chosen
     vision_model: str = ""     # empty -> the index model
-    agent_model: str = ""      # empty -> the provider's default
+    agent_model: str = ""      # empty until chosen
 ```
 
 One visitor's (or the CLI's) choice, passed to indexing (`enrich_index(..., llm=...)`) and chat (`stream_ask(..., llm_config=...)`). `repr=False` on the key means printing a config, or logging one by mistake, never shows the key.
 
-**`chat_model(config, model, max_tokens)`** is the only place a model is created: `ChatAnthropic`, `ChatOpenAI` or `ChatGoogleGenerativeAI`. The test hook `PAGEINDEX_LLM_FACTORY` (for example `tests.fake_llm:make_model`) swaps in the offline model instead. The key is passed only when given; with none, LangChain falls back to the provider's environment variable, which is why it must never be set on a public server: the app must only ever spend *the visitor's* key.
+**`chat_model(config, model, max_tokens)`** is the only place a model is created (an empty model name raises `NoModelChosen`, with a message saying how to choose one): `ChatAnthropic`, `ChatOpenAI` or `ChatGoogleGenerativeAI`. The test hook `PAGEINDEX_LLM_FACTORY` (for example `tests.fake_llm:make_model`) swaps in the offline model instead. The key is passed only when given; with none, LangChain falls back to the provider's environment variable, which is why it must never be set on a public server: the app must only ever spend *the visitor's* key.
 
 **Output caps.** Summaries are capped at 256 or 512 output tokens on Anthropic. OpenAI and Gemini models can spend output tokens on hidden reasoning before answering, so a tight cap could leave no room for the answer; they get a generous cap (`LLMConfig.output_cap`). The prompt sets the summary length either way.
 
-**`list_models(provider, api_key)`** asks the provider which models this key can use (`models.list` in each SDK) and keeps the chat models (drops speech, image, embedding and similar ones by name). Two reasons: model lineups change every few months, so the UI's dropdowns are filled from this live list instead of a list in the code; and listing models is **free**, so it doubles as the key check: a bad key raises the provider's own error. `default_model(models, preferred)` picks the provider's default if the key has it, else the first listed model.
+**`list_models(provider, api_key)`** asks the provider which models this key can use (`models.list` in each SDK) and keeps the chat models (drops speech, image, embedding and similar ones by name). Two reasons: model lineups change every few months, so the UI's dropdowns are filled from this live list instead of a list in the code; and listing models is **free**, so it doubles as the key check: a bad key raises the provider's own error.
 
 ---
 

@@ -48,7 +48,7 @@ def prose(text: rx.Var[str]) -> rx.Component:
 def model_select(label: str, value: rx.Var, on_change, hint: str) -> rx.Component:
     return rx.vstack(
         rx.text(label, size="1", weight="medium"),
-        rx.select(State.models, value=value, on_change=on_change, size="1", width="100%"),
+        rx.select(State.models, value=value, on_change=on_change, placeholder="Choose a model", size="1", width="100%"),
         rx.text(hint, **MUTED),
         spacing="1",
         width="100%",
@@ -350,16 +350,13 @@ def pending_view() -> rx.Component:
         ),
         rx.cond(State.show_advanced, advanced_options()),
         rx.text(State.pending_detail, size="2", id="pending-detail"),
-        rx.cond(
-            State.needs_key_to_index & ~State.key_set,
-            rx.text("These options use your API key: add it above, or pick Free.", size="1", color_scheme="amber"),
-        ),
+        rx.cond(State.index_hint != "", rx.text(State.index_hint, size="1", color_scheme="amber")),
         rx.hstack(
             rx.button(
                 "Index it",
                 on_click=State.confirm_index,
                 loading=State.rebuilding,
-                disabled=State.needs_key_to_index & ~State.key_set,
+                disabled=State.index_hint != "",
                 **PRIMARY,
             ),
             rx.button("Cancel", variant="soft", color_scheme="gray", on_click=State.cancel_pending),
@@ -532,10 +529,7 @@ def empty_chat() -> rx.Component:
                 width="100%",
             ),
         ),
-        rx.cond(
-            ~State.key_set,
-            rx.callout("Add your API key to start chatting. You can browse the samples without one.", icon="info", size="1", color_scheme="gray"),
-        ),
+        rx.cond(State.chat_hint != "", rx.callout(State.chat_hint, icon="info", size="1", color_scheme="gray")),
         spacing="4",
         align="start",
         padding="0.5em 0.25em",
@@ -548,7 +542,11 @@ def composer() -> rx.Component:
         rx.hstack(
             rx.input(
                 name="question",
-                placeholder=rx.cond(State.key_set, "Ask a question about the documents", "Add your API key to chat"),
+                placeholder=rx.cond(
+                    ~State.key_set,
+                    "Add your API key to chat",
+                    rx.cond(State.agent_model == "", "Choose a chat model to start", "Ask a question about the documents"),
+                ),
                 disabled=~State.can_chat,
                 auto_complete="off",
                 variant="soft",

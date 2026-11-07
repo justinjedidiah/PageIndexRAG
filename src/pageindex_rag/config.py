@@ -40,14 +40,14 @@ def get_settings() -> Settings:
     provider = os.getenv("PAGEINDEX_PROVIDER", "anthropic")
     if provider not in PROVIDERS:
         raise ValueError(f"PAGEINDEX_PROVIDER must be one of {', '.join(PROVIDERS)}, not {provider!r}.")
-    defaults = PROVIDERS[provider]  # model defaults follow the provider unless set explicitly
-    index_model = os.getenv("PAGEINDEX_INDEX_MODEL", defaults.index_model)
+    # No default models: the web app's visitors choose theirs; the dev CLI reads them from the environment.
+    index_model = os.getenv("PAGEINDEX_INDEX_MODEL", "")
     return Settings(
         data_dir=Path(os.getenv("PAGEINDEX_DATA_DIR", "data")),
         provider=provider,
         index_model=index_model,
         vision_model=os.getenv("PAGEINDEX_VISION_MODEL", index_model),
-        agent_model=os.getenv("PAGEINDEX_AGENT_MODEL", defaults.agent_model),
+        agent_model=os.getenv("PAGEINDEX_AGENT_MODEL", ""),
         max_leaf_tokens=int(os.getenv("PAGEINDEX_MAX_LEAF_TOKENS", "2000")),
         agent_max_steps=int(os.getenv("PAGEINDEX_AGENT_MAX_STEPS", "15")),
         min_leaf_tokens=int(os.getenv("PAGEINDEX_MIN_LEAF_TOKENS", "150")),

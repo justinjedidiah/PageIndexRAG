@@ -94,6 +94,9 @@ def main() -> int:
         "PAGEINDEX_LLM_FACTORY": "tests.fake_llm:make_model",
         "PAGEINDEX_DATA_DIR": str(data),
         "PAGEINDEX_SAMPLES_DIR": str(samples),
+        # The sample build runs without the UI, so it needs model names; the offline model ignores them.
+        "PAGEINDEX_INDEX_MODEL": "offline-index",
+        "PAGEINDEX_AGENT_MODEL": "offline-agent",
     }
     env.pop("ANTHROPIC_API_KEY", None)
 
@@ -241,20 +244,22 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
             page.locator("input[name=api_key]").fill(KEY)
             page.get_by_role("button", name="Use", exact=True).click()
             expect(page.get_by_text("OpenAI key set")).to_be_visible(timeout=20000)
-            expect(page.get_by_placeholder("Ask a question about the documents")).to_be_enabled()
 
-        step("an OpenAI key is checked, accepted and unlocks chat", enter_key, "03-key.png")
+        step("an OpenAI key is checked and accepted", enter_key, "03-key.png")
 
         def choose_models() -> None:
-            # The dropdowns list what the provider says this key can use, with the defaults chosen first.
-            pickers = page.locator(".rt-SelectTrigger").filter(has_text="gpt-")
+            # Nothing is pre-selected: chat stays locked until the visitor picks a chat model.
+            pickers = page.locator(".rt-SelectTrigger").filter(has_text="Choose a model")
             expect(pickers).to_have_count(2, timeout=10000)
-            expect(pickers.nth(0)).to_contain_text("gpt-6-luna")
-            expect(pickers.nth(1)).to_contain_text("gpt-6.1-sol")
-            pick(pickers.nth(1), "openai-fake-large")
-            expect(page.locator(".rt-SelectTrigger").filter(has_text="openai-fake-large")).to_have_count(1, timeout=10000)
+            expect(page.get_by_placeholder("Choose a chat model to start")).to_be_disabled()
+            expect(page.get_by_text("Choose a model for chat (under your API key)")).to_be_visible()
+            # The dropdowns list what the provider says this key can use.
+            pick(pickers.nth(0), "openai-fake-small")
+            pick(page.locator(".rt-SelectTrigger").filter(has_text="Choose a model"), "openai-fake-large")
+            expect(page.locator(".rt-SelectTrigger").filter(has_text="Choose a model")).to_have_count(0, timeout=10000)
+            expect(page.get_by_placeholder("Ask a question about the documents")).to_be_enabled(timeout=10000)
 
-        step("models are listed for the key and can be changed", choose_models, "03b-models.png")
+        step("both models must be chosen from the key's list before chatting", choose_models, "03b-models.png")
 
         def key_not_in_page() -> None:
             assert KEY not in page.content(), "key present in the page HTML"

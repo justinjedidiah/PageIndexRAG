@@ -10,16 +10,15 @@ from langchain_core.messages import AIMessage
 from pageindex_rag import providers
 from pageindex_rag.agent.graph import _refused
 from pageindex_rag.errors import friendly_error
-from pageindex_rag.providers import PROVIDERS, LLMConfig, chat_model, default_model, list_models
+from pageindex_rag.providers import PROVIDERS, LLMConfig, NoModelChosen, chat_model, list_models
 
 SECRET = "sk-secret-do-not-show-123"
 
 
-def test_config_defaults_follow_the_provider():
-    for provider, info in PROVIDERS.items():
+def test_there_are_no_default_models():
+    for provider in PROVIDERS:
         config = LLMConfig(provider, "k")
-        assert (config.index_model, config.agent_model) == (info.index_model, info.agent_model)
-        assert config.vision_model == config.index_model  # images are described by the indexing model
+        assert (config.index_model, config.vision_model, config.agent_model) == ("", "", "")
     chosen = LLMConfig("openai", "k", index_model="small", agent_model="big")
     assert (chosen.index_model, chosen.vision_model, chosen.agent_model) == ("small", "small", "big")
     with pytest.raises(ValueError):
@@ -68,10 +67,10 @@ def test_list_models_keeps_only_chat_models(monkeypatch):
     assert list_models("anthropic", "k") == ["claude-haiku-5-5", "claude-sonnet-5-5"]
 
 
-def test_default_model_prefers_the_configured_one():
-    assert default_model(["a", "b", "gpt-6-luna"], "gpt-6-luna") == "gpt-6-luna"
-    assert default_model(["a", "b"], "gpt-6-luna") == "a"  # this key does not have it
-    assert default_model([], "gpt-6-luna") == "gpt-6-luna"
+def test_a_model_must_be_chosen_before_use(monkeypatch):
+    monkeypatch.delenv("PAGEINDEX_LLM_FACTORY", raising=False)
+    with pytest.raises(NoModelChosen):
+        chat_model(LLMConfig("openai", "k"), "")
 
 
 def _http(status: int) -> httpx.Response:
@@ -119,14 +118,18 @@ def test_refusals_are_recognised_for_every_provider():
     assert not _refused(AIMessage("fine", response_metadata={"stop_reason": "end_turn"}))
 
 
-def test_settings_pick_the_providers_default_models(monkeypatch):
+def test_settings_take_models_only_from_the_environment(monkeypatch):
     from pageindex_rag.config import get_settings
 
     monkeypatch.setenv("PAGEINDEX_PROVIDER", "openai")
     for name in ("PAGEINDEX_INDEX_MODEL", "PAGEINDEX_VISION_MODEL", "PAGEINDEX_AGENT_MODEL"):
         monkeypatch.delenv(name, raising=False)
     settings = get_settings()
-    assert (settings.provider, settings.index_model, settings.agent_model) == ("openai", "gpt-6-luna", "gpt-6.1-sol")
+    assert (settings.provider, settings.index_model, settings.agent_model) == ("openai", "", "")
+    monkeypatch.setenv("PAGEINDEX_INDEX_MODEL", "small")
+    monkeypatch.setenv("PAGEINDEX_AGENT_MODEL", "big")
+    settings = get_settings()
+    assert (settings.index_model, settings.vision_model, settings.agent_model) == ("small", "small", "big")
     monkeypatch.setenv("PAGEINDEX_PROVIDER", "mistral")
     with pytest.raises(ValueError):
         get_settings()
