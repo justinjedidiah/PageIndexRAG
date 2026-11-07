@@ -13,3 +13,6 @@ data/
 # Reflex
 .web/
 .states/
+
+# Editor settings
+.vscode/
