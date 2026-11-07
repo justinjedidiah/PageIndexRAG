@@ -22,6 +22,7 @@ from .options import preset_options
 from .preview import fill_previews
 from .refine import refine_tree
 from .tree import build_tree
+from .heading_looks import apply_heading_looks
 from .typed_toc import apply_typed_toc
 
 OnProgress = Callable[[int, int, str], None]  # done, total, what just finished
@@ -47,7 +48,13 @@ def build_index(
     path = Path(path)
     options = options or preset_options(settings=settings)
     kind, blocks = _extract(path)
+    # Where the outline comes from, in order: headings, else a typed contents page, else lines formatted like
+    # headings, else nothing (the text is then cut by size). The first that finds one wins.
+    has_headings = any(isinstance(b, Heading) for b in blocks)
     blocks, from_contents_page = apply_typed_toc(blocks)  # a typed contents page: removed, and used if no headings
+    from_looks = False
+    if not has_headings and not from_contents_page:
+        blocks, from_looks = apply_heading_looks(blocks)
     doc_id = make_doc_id(path)
 
     root, raw_images = build_tree(blocks, title=path.stem, kind=kind)
@@ -75,7 +82,9 @@ def build_index(
         source_path=path.name,
         kind=kind,
         source_toc=source_toc,
-        structure_source="typed_toc" if from_contents_page else "headings" if headings else "none",
+        structure_source=(
+            "typed_toc" if from_contents_page else "formatting" if from_looks else "headings" if headings else "none"
+        ),
         root=root,
         images=images,
         summary=root.summary,

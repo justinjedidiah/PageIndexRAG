@@ -10,6 +10,8 @@ its entries become TocLine blocks, kept as the document's own ToC for reference.
 """
 
 import re
+from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 
 from docx import Document
@@ -33,32 +35,43 @@ _NOT_TEXT = {
 _TOC_PAGE = re.compile(r"^(?P<title>.*?)[\s.·…_-]*?(?P<page>[0-9]+|[ivxlcdm]+)$", re.IGNORECASE)
 
 
+class _Context:
+    """Per document: the styles by id and the default text size, looked up once rather than per paragraph."""
+
+    def __init__(self, doc: DocxDocument):
+        self.doc = doc
+        self.styles = {style.style_id: style for style in doc.styles}
+        size = doc.styles.element.find(f"{qn('w:docDefaults')}/{qn('w:rPrDefault')}/{qn('w:rPr')}/{qn('w:sz')}")
+        self.default_size = _half_points(size)
+
+
 def extract_docx(path: Path) -> list[Block]:
     doc = Document(str(path))
     blocks: list[Block] = []
-    _read(doc.element.body, doc, blocks, in_toc=False)
+    _read(doc.element.body, _Context(doc), blocks, in_toc=False)
     return blocks
 
 
-def _read(container, doc: DocxDocument, blocks: list[Block], in_toc: bool) -> None:
+def _read(container, ctx: _Context, blocks: list[Block], in_toc: bool) -> None:
     """Read paragraphs and tables in document order, going into content controls."""
     for element in container.iterchildren():
         if element.tag == qn("w:p"):
-            _read_paragraph(element, doc, blocks, in_toc)
+            _read_paragraph(element, ctx, blocks, in_toc)
         elif element.tag == qn("w:tbl"):
-            blocks.extend(_images_in(element, doc))
-            markdown = _table_to_markdown(DocxTable(element, doc))
+            blocks.extend(_images_in(element, ctx.doc))
+            markdown = _table_to_markdown(DocxTable(element, ctx.doc))
             if markdown:
                 blocks.append(Table(markdown))
         elif element.tag == qn("w:sdt"):  # a content control: read what is inside it
             content = element.find(qn("w:sdtContent"))
             if content is not None:
-                _read(content, doc, blocks, in_toc or _is_toc_control(element))
+                _read(content, ctx, blocks, in_toc or _is_toc_control(element))
         elif element.tag == qn("w:customXml"):  # another wrapper around ordinary content
-            _read(element, doc, blocks, in_toc)
+            _read(element, ctx, blocks, in_toc)
 
 
-def _read_paragraph(element, doc: DocxDocument, blocks: list[Block], in_toc: bool) -> None:
+def _read_paragraph(element, ctx: _Context, blocks: list[Block], in_toc: bool) -> None:
+    doc = ctx.doc
     blocks.extend(_images_in(element, doc))
     text = paragraph_text(element).strip()
     if not text:
@@ -72,7 +85,19 @@ def _read_paragraph(element, doc: DocxDocument, blocks: list[Block], in_toc: boo
             blocks.append(entry)
         return
     level = _outline_level(paragraph)
-    blocks.append(Heading(level, text) if level else Paragraph(text, indent=_indent(paragraph, paragraph_text(element))))
+    if level:
+        blocks.append(Heading(level, text))
+        return
+    look = _look(element, paragraph, ctx)
+    blocks.append(
+        Paragraph(
+            text,
+            indent=_indent(paragraph, paragraph_text(element)),
+            bold=look.bold,
+            size=look.size,
+            listed=_in_list(paragraph),
+        )
+    )
 
 
 def paragraph_text(element) -> str:
@@ -106,7 +131,99 @@ def _indent(paragraph: DocxParagraph, raw_text: str) -> float:
     except (ValueError, TypeError):  # a malformed value in the file
         left = None
     leading = raw_text[: len(raw_text) - len(raw_text.lstrip())]
-    return (left.pt if left is not None else 0) + 36 * leading.count("	") + 4 * leading.count(" ")
+    return (left.pt if left is not None else 0) + 36 * leading.count("\t") + 4 * leading.count(" ")
+
+
+@dataclass
+class _Look:
+    bold: bool  # every piece of text in the paragraph is bold
+    size: float | None  # the font size (points) most of its text uses; None if it cannot be told
+
+
+def _look(element, paragraph: DocxParagraph, ctx: _Context) -> _Look:
+    """How the paragraph looks, as Word works it out: the text's own formatting, else its character
+    style, else the paragraph's style (and the styles that one is based on), else the document's defaults.
+    """
+    runs = [(run, text) for run, text in _text_runs(element) if text.strip()]
+    if not runs:
+        return _Look(False, None)
+    sizes: Counter = Counter()
+    bold = True
+    for run, text in runs:
+        rpr = run.find(qn("w:rPr"))
+        char_style = ctx.styles.get(_val(rpr.find(qn("w:rStyle")))) if rpr is not None and rpr.find(qn("w:rStyle")) is not None else None
+        run_bold = _on_off(rpr.find(qn("w:b"))) if rpr is not None else None
+        if run_bold is None:
+            run_bold = _from_styles(char_style, lambda style: style.font.bold)
+        if run_bold is None:
+            run_bold = _from_styles(paragraph.style, lambda style: style.font.bold)
+        bold = bold and bool(run_bold)
+        size = _half_points(rpr.find(qn("w:sz"))) if rpr is not None else None
+        if size is None:
+            size = _from_styles(char_style, lambda style: style.font.size.pt if style.font.size else None)
+        if size is None:
+            size = _from_styles(paragraph.style, lambda style: style.font.size.pt if style.font.size else None)
+        sizes[size if size is not None else ctx.default_size] += len(text.strip())
+    common = sizes.most_common(1)[0][0]
+    return _Look(bold, common)
+
+
+def _text_runs(element):
+    """The runs that hold the paragraph's own text (the same text paragraph_text reads), with their text."""
+    for child in element:
+        if child.tag in _NOT_TEXT:
+            continue
+        if child.tag == qn("w:r"):
+            yield child, "".join(t.text or "" for t in child.iter(qn("w:t")))
+        else:
+            yield from _text_runs(child)
+
+
+def _in_list(paragraph: DocxParagraph) -> bool:
+    """True for an item of a Word numbered or bulleted list (on the paragraph, or through its style)."""
+    ppr = paragraph._p.pPr
+    if ppr is not None and ppr.numPr is not None:
+        return True
+    style = paragraph.style
+    for _ in range(_MAX_STYLE_DEPTH):
+        if style is None:
+            return False
+        style_ppr = style.element.pPr
+        if style_ppr is not None and style_ppr.numPr is not None:
+            return True
+        style = style.base_style
+    return False
+
+
+def _from_styles(style, read):
+    """The first value a style, or a style it is based on, sets; None if none sets it."""
+    for _ in range(_MAX_STYLE_DEPTH):
+        if style is None:
+            return None
+        value = read(style)
+        if value is not None:
+            return value
+        style = style.base_style
+    return None
+
+
+def _on_off(element) -> bool | None:
+    """A Word on/off setting such as <w:b/> or <w:b w:val="0"/>; None when not set."""
+    if element is None:
+        return None
+    return (element.get(qn("w:val")) or "true").lower() not in ("0", "false", "off")
+
+
+def _half_points(element) -> float | None:
+    """A Word size setting (in half-points) as points; None when not set or malformed."""
+    try:
+        return int(element.get(qn("w:val"))) / 2 if element is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _val(element) -> str | None:
+    return element.get(qn("w:val")) if element is not None else None
 
 
 def _toc_level(paragraph: DocxParagraph) -> int | None:

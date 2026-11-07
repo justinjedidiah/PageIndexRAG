@@ -77,7 +77,17 @@ A **list of figures or tables** looks just like a contents page but points at ca
 
 A trusted contents page is removed from the text and its entries kept as `TocLine` blocks (unless Word's own ToC is already kept). If the document **has headings**, that is all: the headings still build the outline. If it **has none**, the paragraphs the entries point to become `Heading` blocks at the entries' levels, and the contents page has built the outline.
 
-`build_index` records where the tree came from in `structure_source`: `"headings"`, `"typed_toc"`, or `"none"` when neither gave one (the text is then cut by size). The Browse panel and `pageindex tree` show it, so a flat outline explains itself.
+**Headings formatted by hand** (`heading_looks.py`)
+
+The last try, only when a document has no headings and no trustworthy contents page: many people make headings by hand, bold or bigger or numbered. For this the Word reader also records how each paragraph looks: whether all its text is bold, the font size most of it uses (from the text's own formatting, else its character style, else the paragraph's style chain, else the document's default), and whether it is a Word list item. `apply_heading_looks`:
+
+1. **Candidates:** short lines (12 words, 100 characters) that do not end like a sentence (a question mark or colon is fine) and stand out: all bold, at least 15% bigger than the document's normal size (the size most of its text uses), numbered like a section ("1.2", "Chapter 3", "A."), or in capitals. Captions ("Figure 3") and Word list items are not candidates: Word's automatic numbering is rarely a heading.
+2. **Group them by look**: size, bold, capitals, question or not.
+3. **Keep only looks that recur**: at least 3 lines (2 in a document under 30 paragraphs) with text between them. More than 3 lines of one look in a row with nothing between are a list (lines numbered at different depths, like "1 Setup" then "1.1 Tools", may follow each other: that is nesting). Headings are a pattern that repeats through a document; a pull quote, a warning or one big title at the top is not, and stays text. This is also what makes bold questions work: spread through the document they are an FAQ's sections, once or twice they are quotes.
+4. **Give up** if the kept lines hold more than 30% of the text, or are more than two thirds of the paragraphs: the document just uses a lot of bold. Measured by text rather than by paragraphs because in an FAQ (a question, then a one-paragraph answer) half the paragraphs are headings, yet they are a small part of the text.
+5. **Levels**: from numbering if most are numbered "1.2"-style, else by look (biggest first, then bold, then capitals), at most 3.
+
+`build_index` records where the tree came from in `structure_source`: `"headings"`, `"typed_toc"`, `"formatting"`, or `"none"` when nothing gave one (the text is then cut by size). The Browse panel and `pageindex tree` show it, so a flat outline explains itself.
 
 **Images**
 
@@ -556,7 +566,7 @@ Used by the command line, the sample builder and the tests. The web page calls t
 
 ## Things that are not built, or limited
 
-1. **A Word file without headings (no outline levels) gets no real structure.** A typed contents page is used if it has one (see above); headings formatted by hand (bold, bigger, numbered) are not used yet, and are planned next. All its text lands under the root and is only cut by size into balanced parts (one level, titled by their first sentence). The design intends to have Claude *generate* a table of contents for such files, and optionally pick topic boundaries when splitting; **neither is implemented yet**. Both are planned together with PDF.
+1. **A Word file without headings (no outline levels) gets no real structure.** A typed contents page or lines formatted like headings are used if it has them (see above); only a document with neither gets no real structure. All its text lands under the root and is only cut by size into balanced parts (one level, titled by their first sentence). The design intends to have Claude *generate* a table of contents for such files, and optionally pick topic boundaries when splitting; **neither is implemented yet**. Both are planned together with PDF.
 2. **PDF reading does not exist** (`NotImplementedError`, see above).
 3. Word features that are ignored: headers and footers, footnotes, text boxes, nested tables, content controls inside table cells. Merged table cells may repeat their text.
 4. The token estimate is a rough rule (characters / 4).

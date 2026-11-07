@@ -16,6 +16,10 @@ class Paragraph:
     # How far the paragraph starts from the left margin, in points (its indent plus leading tabs or spaces).
     # Only used to read the levels of a typed table of contents; never compared for anything else.
     indent: float = field(default=0, compare=False)
+    # How it looks, for spotting lines formatted like headings in a document without heading styles.
+    bold: bool = field(default=False, compare=False)  # all of its text is bold
+    size: float | None = field(default=None, compare=False)  # font size in points (None: unknown)
+    listed: bool = field(default=False, compare=False)  # an item of a Word numbered or bulleted list
 
 
 @dataclass
