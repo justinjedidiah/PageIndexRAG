@@ -1,9 +1,9 @@
-from pageindex_rag.indexing.blocks import Heading, Image, Paragraph
-from pageindex_rag.indexing.options import matching_preset, preset_options
-from pageindex_rag.indexing.preview import fill_previews
-from pageindex_rag.indexing.refine import refine_tree
-from pageindex_rag.indexing.tree import build_tree
-from pageindex_rag.models import IndexOptions
+from toc_rag.indexing.blocks import Heading, Image, Paragraph
+from toc_rag.indexing.options import matching_preset, preset_options
+from toc_rag.indexing.preview import fill_previews
+from toc_rag.indexing.refine import refine_tree
+from toc_rag.indexing.tree import build_tree
+from toc_rag.models import IndexOptions
 
 
 def words(n: int, word: str = "word") -> str:

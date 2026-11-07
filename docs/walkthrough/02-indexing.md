@@ -1,6 +1,6 @@
 # 02. Indexing: from an uploaded file to a searchable tree
 
-Files covered: everything in `src/pageindex_rag/indexing/` (`docx_extract.py`, `pdf_extract.py`, `pdf_layout.py`, `markdown_extract.py`, `tree.py`, `pages.py`, `refine.py`, `split.py`, `preview.py`, `options.py`, `estimate.py`, `summarize.py`, `pipeline.py`, `blocks.py` was in file 01).
+Files covered: everything in `src/toc_rag/indexing/` (`docx_extract.py`, `pdf_extract.py`, `pdf_layout.py`, `markdown_extract.py`, `tree.py`, `pages.py`, `refine.py`, `split.py`, `preview.py`, `options.py`, `estimate.py`, `summarize.py`, `pipeline.py`, `blocks.py` was in file 01).
 
 **Indexing** means turning a document into the tree of sections described in file 01, with a summary on every section. It happens once per document. Asking questions later only reads the result.
 
@@ -94,7 +94,7 @@ A document with headings can still have one huge section whose parts are only bo
 
 Both uses share one function, `find_heading_looks(blocks, paragraphs, normal_size, min_repeats, first_level, max_levels)`; `apply_heading_looks` (the whole document) and `apply_section_looks` (each big section) only choose those settings.
 
-`build_index` records where the tree came from in `structure_source`: `"headings"`, `"typed_toc"`, `"formatting"`, or `"none"` when nothing gave one (the text is then cut by size). The Browse panel and `pageindex tree` show it, so a flat outline explains itself.
+`build_index` records where the tree came from in `structure_source`: `"headings"`, `"typed_toc"`, `"formatting"`, or `"none"` when nothing gave one (the text is then cut by size). The Browse panel and `tocrag tree` show it, so a flat outline explains itself.
 
 **Images**
 
@@ -591,7 +591,7 @@ def enrich_index(index, store, settings, api_key=None, on_progress=None, options
 
 Each pass runs only if the options ask for it. `summary_length="short"` picks a schema whose summary field asks for one or two sentences, adds "in one or two short sentences" to the prompt, and caps the reply at 256 tokens (512 for detailed). The caps only stop a runaway reply; the prompt sets the length.
 
-- The imports are **inside the function** on purpose: the tests replace `pageindex_rag.llm.chat_model` with a fake and that only works if it is looked up at call time; and it avoids loading the Anthropic libraries when no AI call is being made.
+- The imports are **inside the function** on purpose: the tests replace `toc_rag.llm.chat_model` with a fake and that only works if it is looked up at call time; and it avoids loading the Anthropic libraries when no AI call is being made.
 - `on_step` is called from the worker threads, possibly at the same moment, so the counter is protected by a **lock** (`with lock:` lets one thread at a time through). `nonlocal done` lets the inner function change the outer variable.
 - Images are described **first**, then summaries, because the summaries use the image descriptions.
 - The vision model and the summary model come from settings (both Haiku by default); the visitor's `api_key` is passed to both. Finally the document's `summary` is a copy of the root's.
@@ -621,5 +621,5 @@ Used by the command line, the sample builder and the tests. The web page calls t
 4. The token estimate is a rough rule (characters / 4).
 5. Splitting is by size, not by topic: a cut can fall between two sentences that belong together.
 6. If any one Claude call fails (a bad key, a rate limit), the **whole indexing run stops** and the half-built document is deleted. There is no "resume". (The Anthropic library already retries transient errors a couple of times by itself.)
-7. Six parallel calls could exceed a small account's rate limit; the number is configurable (`PAGEINDEX_INDEX_WORKERS`).
+7. Six parallel calls could exceed a small account's rate limit; the number is configurable (`TOC_RAG_INDEX_WORKERS`).
 8. How *good* Haiku's summaries are on real documents has not been tested; that is the next thing to look at with your real key.

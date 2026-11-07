@@ -5,10 +5,10 @@ from docx.enum.style import WD_STYLE_TYPE
 from docx.oxml import parse_xml
 from docx.oxml.ns import nsdecls, qn
 
-from pageindex_rag.indexing import build_index, preset_options
-from pageindex_rag.indexing.blocks import Heading, Paragraph, TocLine
-from pageindex_rag.indexing.docx_extract import extract_docx
-from pageindex_rag.storage import Store
+from toc_rag.indexing import build_index, preset_options
+from toc_rag.indexing.blocks import Heading, Paragraph, TocLine
+from toc_rag.indexing.docx_extract import extract_docx
+from toc_rag.storage import Store
 
 W = nsdecls("w")
 MC = 'xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"'

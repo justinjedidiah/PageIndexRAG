@@ -7,10 +7,10 @@ import pytest
 from google.genai import errors as google_errors
 from langchain_core.messages import AIMessage
 
-from pageindex_rag import providers
-from pageindex_rag.agent.graph import _refused
-from pageindex_rag.errors import friendly_error
-from pageindex_rag.providers import PROVIDERS, LLMConfig, NoModelChosen, chat_model, list_models
+from toc_rag import providers
+from toc_rag.agent.graph import _refused
+from toc_rag.errors import friendly_error
+from toc_rag.providers import PROVIDERS, LLMConfig, NoModelChosen, chat_model, list_models
 
 SECRET = "sk-secret-do-not-show-123"
 
@@ -37,7 +37,7 @@ def test_output_caps_stay_small_only_where_they_are_safe():
 
 
 def test_chat_model_builds_each_providers_model(monkeypatch):
-    monkeypatch.delenv("PAGEINDEX_LLM_FACTORY", raising=False)
+    monkeypatch.delenv("TOC_RAG_LLM_FACTORY", raising=False)
     built = {p: chat_model(LLMConfig(p, "test-key"), "some-model", 100) for p in PROVIDERS}
     assert type(built["anthropic"]).__name__ == "ChatAnthropic"
     assert type(built["openai"]).__name__ == "ChatOpenAI"
@@ -45,7 +45,7 @@ def test_chat_model_builds_each_providers_model(monkeypatch):
 
 
 def test_list_models_keeps_only_chat_models(monkeypatch):
-    monkeypatch.delenv("PAGEINDEX_LLM_FACTORY", raising=False)
+    monkeypatch.delenv("TOC_RAG_LLM_FACTORY", raising=False)
     openai_ids = ["gpt-6-luna", "gpt-6.1-sol", "gpt-6-audio", "gpt-image-2", "text-embedding-3", "whisper-1", "o5-mini"]
     monkeypatch.setattr(openai, "OpenAI", lambda api_key: SimpleNamespace(
         models=SimpleNamespace(list=lambda: [SimpleNamespace(id=i) for i in openai_ids])))
@@ -68,7 +68,7 @@ def test_list_models_keeps_only_chat_models(monkeypatch):
 
 
 def test_a_model_must_be_chosen_before_use(monkeypatch):
-    monkeypatch.delenv("PAGEINDEX_LLM_FACTORY", raising=False)
+    monkeypatch.delenv("TOC_RAG_LLM_FACTORY", raising=False)
     with pytest.raises(NoModelChosen):
         chat_model(LLMConfig("openai", "k"), "")
 
@@ -119,18 +119,18 @@ def test_refusals_are_recognised_for_every_provider():
 
 
 def test_settings_take_models_only_from_the_environment(monkeypatch):
-    from pageindex_rag.config import get_settings
+    from toc_rag.config import get_settings
 
-    monkeypatch.setenv("PAGEINDEX_PROVIDER", "openai")
-    for name in ("PAGEINDEX_INDEX_MODEL", "PAGEINDEX_VISION_MODEL", "PAGEINDEX_AGENT_MODEL"):
+    monkeypatch.setenv("TOC_RAG_PROVIDER", "openai")
+    for name in ("TOC_RAG_INDEX_MODEL", "TOC_RAG_VISION_MODEL", "TOC_RAG_AGENT_MODEL"):
         monkeypatch.delenv(name, raising=False)
     settings = get_settings()
     assert (settings.provider, settings.index_model, settings.agent_model) == ("openai", "", "")
-    monkeypatch.setenv("PAGEINDEX_INDEX_MODEL", "small")
-    monkeypatch.setenv("PAGEINDEX_AGENT_MODEL", "big")
+    monkeypatch.setenv("TOC_RAG_INDEX_MODEL", "small")
+    monkeypatch.setenv("TOC_RAG_AGENT_MODEL", "big")
     settings = get_settings()
     assert (settings.index_model, settings.vision_model, settings.agent_model) == ("small", "small", "big")
-    monkeypatch.setenv("PAGEINDEX_PROVIDER", "mistral")
+    monkeypatch.setenv("TOC_RAG_PROVIDER", "mistral")
     with pytest.raises(ValueError):
         get_settings()
 

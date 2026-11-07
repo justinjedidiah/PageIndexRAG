@@ -10,10 +10,10 @@ from PIL import Image as PILImage
 from reportlab.lib.utils import ImageReader, simpleSplit
 from reportlab.pdfgen import canvas
 
-from pageindex_rag.indexing import DocumentRejected, build_index, preset_options
-from pageindex_rag.indexing.blocks import Heading, Paragraph
-from pageindex_rag.indexing.pdf_extract import extract_pdf
-from pageindex_rag.storage import Store
+from toc_rag.indexing import DocumentRejected, build_index, preset_options
+from toc_rag.indexing.blocks import Heading, Paragraph
+from toc_rag.indexing.pdf_extract import extract_pdf
+from toc_rag.storage import Store
 
 BODY = "Clean the panels with plain water in the early morning, when the glass is cool. "
 TOP = 780
@@ -219,7 +219,7 @@ def test_too_much_text_is_refused_for_any_file_type(tmp_path, settings):
 
 import os  # noqa: E402
 
-from pageindex_rag.indexing import pdf_cache  # noqa: E402
+from toc_rag.indexing import pdf_cache  # noqa: E402
 
 
 def test_the_read_is_saved_next_to_the_pdf_and_reused(tmp_path, monkeypatch):
@@ -325,7 +325,7 @@ def test_a_bookmark_title_printed_over_two_lines_is_matched(tmp_path):
 
 import io as _io  # noqa: E402
 
-from pageindex_rag.indexing.blocks import Image, Table  # noqa: E402
+from toc_rag.indexing.blocks import Image, Table  # noqa: E402
 from tests.conftest import make_noisy_png  # noqa: E402
 
 SENTENCE = "The output of the panels rises through the morning and falls again in the late afternoon."
@@ -516,7 +516,7 @@ def test_a_contents_page_over_two_pages_with_different_margins_keeps_its_levels(
                 c.drawString(72, top - 30 - i * 14, line)
         c.showPage()
     c.save()
-    from pageindex_rag.indexing.typed_toc import apply_typed_toc
+    from toc_rag.indexing.typed_toc import apply_typed_toc
 
     content = extract_pdf(tmp_path / "margins.pdf")
     blocks, used = apply_typed_toc(content.blocks, content.page_labels)

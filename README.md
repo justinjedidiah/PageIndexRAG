@@ -1,4 +1,4 @@
-# PageIndex RAG
+# TOC RAG
 
 **Retrieval without vectors.** An AI agent answers questions about your documents by navigating their table of contents, the way a person would: open the document, scan the outline, step into the right section, read it, and cite it. No chunking, no embeddings, no similarity search.
 
@@ -57,13 +57,13 @@ docker compose up --build      # stop with: docker compose down
 or without Compose:
 
 ```bash
-docker build -t pageindex-rag .
-docker run -p 8000:8000 pageindex-rag
+docker build -t toc-rag .
+docker run -p 8000:8000 toc-rag
 ```
 
 Open http://localhost:8000 (stop `reflex run` first if it is running, since it uses port 8000 too). The first start takes a minute or two while the pages are built. One container serves both the page and the backend, on the port in `PORT` (default 8000).
 
-When it runs on a public address, set `API_URL` to that address (for example `https://pageindex.example.com`), so the page knows where to reach the backend. On Railway this is filled in automatically from the app's public domain. Never set an API key on the server: the app only uses the key each visitor enters. Uploads live inside the container and are deleted after 2 hours, so no volume is needed.
+When it runs on a public address, set `API_URL` to that address (for example `https://toc-rag.example.com`), so the page knows where to reach the backend. On Railway this is filled in automatically from the app's public domain. Never set an API key on the server: the app only uses the key each visitor enters. Uploads live inside the container and are deleted after 2 hours, so no volume is needed.
 
 ## Tests
 
@@ -77,11 +77,11 @@ The end-to-end run starts the app with a stand-in model (`tests/fake_llm.py`), d
 ## Project layout
 
 ```
-src/pageindex_rag/
+src/toc_rag/
   indexing/     Word/PDF/Markdown -> section tree -> refine (split, merge) -> summaries
   agent/        the navigation tools and the LangGraph agent loop
   providers.py  Anthropic, OpenAI and Gemini: models, model lists
-pageindex_app/  the Reflex web app
+toc_app/  the Reflex web app
 tests/          unit tests, the offline fake model, the end-to-end browser run
 samples/        the sample documents and their indexes
 ```
@@ -99,6 +99,6 @@ samples/        the sample documents and their indexes
 
 ## Credits
 
-Inspired by [PageIndex](https://github.com/VectifyAI/PageIndex) by VectifyAI. Built with [Reflex](https://reflex.dev), [LangGraph](https://www.langchain.com/langgraph) and [LangChain](https://www.langchain.com).
+Inspired by [PageIndex](https://github.com/VectifyAI/PageIndex) by VectifyAI; an independent project, not affiliated with VectifyAI. Built with [Reflex](https://reflex.dev), [LangGraph](https://www.langchain.com/langgraph) and [LangChain](https://www.langchain.com).
 
 <!-- Licence: none chosen yet. Add a LICENSE file and a line here when it is. -->

@@ -90,10 +90,10 @@ class LLMConfig:
 
 
 def chat_model(config: LLMConfig, model: str, max_tokens: int = 2048) -> BaseChatModel:
-    """A LangChain chat model for this provider. `PAGEINDEX_LLM_FACTORY` swaps in an offline model for tests."""
+    """A LangChain chat model for this provider. `TOC_RAG_LLM_FACTORY` swaps in an offline model for tests."""
     if not model:
-        raise NoModelChosen("No model chosen. Pick one in the app, or set PAGEINDEX_INDEX_MODEL / PAGEINDEX_AGENT_MODEL.")
-    factory = os.getenv("PAGEINDEX_LLM_FACTORY")  # "package.module:function"
+        raise NoModelChosen("No model chosen. Pick one in the app, or set TOC_RAG_INDEX_MODEL / TOC_RAG_AGENT_MODEL.")
+    factory = os.getenv("TOC_RAG_LLM_FACTORY")  # "package.module:function"
     if factory:
         module_name, _, function = factory.partition(":")
         return getattr(importlib.import_module(module_name), function)(model)
@@ -116,7 +116,7 @@ def list_models(provider: Provider, api_key: str) -> list[str]:
 
     Listing models costs nothing, so this is also how a key is checked.
     """
-    factory = os.getenv("PAGEINDEX_LLM_FACTORY")
+    factory = os.getenv("TOC_RAG_LLM_FACTORY")
     if factory:  # offline runs: the fake model module may provide its own list
         module = importlib.import_module(factory.partition(":")[0])
         if hasattr(module, "list_models"):

@@ -251,13 +251,13 @@ def main() -> None:
             print(f"wrote    {path.relative_to(ROOT)}")
 
     if args.index:
-        from pageindex_rag.config import get_settings
-        from pageindex_rag.indexing import index_document
-        from pageindex_rag.storage import Store
+        from toc_rag.config import get_settings
+        from toc_rag.indexing import index_document
+        from toc_rag.storage import Store
 
         settings = dataclasses.replace(get_settings(), data_dir=args.out)
         if not args.no_llm and not settings.index_model:
-            raise SystemExit("Set PAGEINDEX_PROVIDER and PAGEINDEX_INDEX_MODEL (and its key) in .env, or pass --no-llm.")
+            raise SystemExit("Set TOC_RAG_PROVIDER and TOC_RAG_INDEX_MODEL (and its key) in .env, or pass --no-llm.")
         store = Store(args.out)
         for path in sorted(SOURCE_DIR.glob("*.docx")):
             index = index_document(path, store, settings, use_llm=not args.no_llm)

@@ -1,4 +1,4 @@
-"""PageIndex RAG: chat with documents by navigating their table of contents."""
+"""TOC RAG: chat with documents by navigating their table of contents."""
 
 import asyncio
 import logging
@@ -23,7 +23,7 @@ app = rx.App(
         rx.el.link(rel="icon", href="/favicon.ico", sizes="48x48"),
     ],
 )
-app.add_page(index, route="/", title="PageIndex RAG", on_load=State.on_load)
+app.add_page(index, route="/", title="TOC RAG", on_load=State.on_load)
 
 
 async def sweep_expired_sessions() -> None:

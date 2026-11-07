@@ -5,7 +5,7 @@ from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, Too
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from pydantic import Field
 
-from pageindex_rag.agent import (
+from toc_rag.agent import (
     AnswerResult,
     ChatTurn,
     Draft,
@@ -15,10 +15,10 @@ from pageindex_rag.agent import (
     run_agent,
     stream_agent,
 )
-from pageindex_rag.agent.citations import extract_markers
-from pageindex_rag.indexing.blocks import Heading, Image, Paragraph
-from pageindex_rag.indexing.tree import build_tree
-from pageindex_rag.models import DocumentIndex, ImageRecord
+from toc_rag.agent.citations import extract_markers
+from toc_rag.indexing.blocks import Heading, Image, Paragraph
+from toc_rag.indexing.tree import build_tree
+from toc_rag.models import DocumentIndex, ImageRecord
 
 
 class ScriptedModel(BaseChatModel):

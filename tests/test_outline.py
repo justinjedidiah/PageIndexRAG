@@ -1,5 +1,5 @@
-from pageindex_rag.outline import node_markdown, outline_rows
-from pageindex_rag.sessions import describe_duration
+from toc_rag.outline import node_markdown, outline_rows
+from toc_rag.sessions import describe_duration
 
 from .test_agent import make_ships
 

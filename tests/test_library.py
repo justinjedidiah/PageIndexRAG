@@ -1,7 +1,7 @@
-from pageindex_rag.indexing import index_document
-from pageindex_rag.library import Library
-from pageindex_rag.sessions import SessionManager
-from pageindex_rag.storage import Store
+from toc_rag.indexing import index_document
+from toc_rag.library import Library
+from toc_rag.sessions import SessionManager
+from toc_rag.storage import Store
 
 from .conftest import make_png
 
@@ -102,7 +102,7 @@ def test_a_page_of_an_uploaded_pdf_is_rendered_once_and_kept(tmp_path, settings,
     width, height = PILImage.open(io.BytesIO(page.read_bytes())).size
     assert width == 1200 and height > width  # a portrait page, sharp enough to read
 
-    import pageindex_rag.library as library_module
+    import toc_rag.library as library_module
 
     monkeypatch.setattr(library_module, "render_page", lambda *a: (_ for _ in ()).throw(AssertionError("rendered again")))
     assert library.page_file(index.doc_id, 1) == page  # kept: not rendered again

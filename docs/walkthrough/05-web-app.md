@@ -1,8 +1,8 @@
 # 05. The web app (Reflex)
 
-Files covered: everything in `pageindex_app/` (`runtime.py`, `viewmodels.py`, `files.py`, `state.py`, `views.py`, `pageindex_app.py`), plus `rxconfig.py` and `assets/app.css`.
+Files covered: everything in `toc_app/` (`runtime.py`, `viewmodels.py`, `files.py`, `state.py`, `views.py`, `toc_app.py`), plus `rxconfig.py` and `assets/app.css`.
 
-Everything so far (files 01-04) is plain Python with no web in it. This layer puts a website on top. The web app contains **no document logic of its own**: it calls the functions from the earlier files and shows the results. (That is deliberate: the core package never imports anything from `pageindex_app`, which is why it can be tested and used from the command line without a browser.)
+Everything so far (files 01-04) is plain Python with no web in it. This layer puts a website on top. The web app contains **no document logic of its own**: it calls the functions from the earlier files and shows the results. (That is deliberate: the core package never imports anything from `toc_app`, which is why it can be tested and used from the command line without a browser.)
 
 ---
 
@@ -77,11 +77,11 @@ A second route, `/api/files/{scope}/{doc_id}/pages/{n}.png`, serves pictures of 
 
 Starlette is the small web framework Reflex itself is built on, so this plugs in naturally.
 
-## `pageindex_app.py`: the app itself
+## `toc_app.py`: the app itself
 
 ```python
 app = rx.App(api_transformer=api, stylesheets=["/app.css"])
-app.add_page(index, route="/", title="PageIndex RAG", on_load=State.on_load)
+app.add_page(index, route="/", title="TOC RAG", on_load=State.on_load)
 ```
 
 - `api_transformer=api` merges our image route into the server. Reflex puts its own app *inside* ours, so our routes are checked first.
@@ -108,7 +108,7 @@ A function that runs **for as long as the server is alive**: delete expired sess
 
 ```python
 config = rx.Config(
-    app_name="pageindex_app",
+    app_name="toc_app",
     plugins=[rx.plugins.RadixThemesPlugin(theme=rx.theme(appearance="light", accent_color="gray", gray_color="sand", radius="large"))],
     disable_plugins=[rx.plugins.SitemapPlugin],
 )

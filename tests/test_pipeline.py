@@ -1,5 +1,5 @@
-from pageindex_rag.indexing import index_document
-from pageindex_rag.storage import Store
+from toc_rag.indexing import index_document
+from toc_rag.storage import Store
 
 from .conftest import make_png
 
@@ -41,12 +41,12 @@ def test_reindexing_keeps_one_library_entry(tmp_path, settings):
 
 
 def test_free_preset_makes_no_llm_calls_and_fills_previews(tmp_path, settings, monkeypatch):
-    from pageindex_rag.indexing import preset_options
+    from toc_rag.indexing import preset_options
 
     def no_llm(*args, **kwargs):
         raise AssertionError("the Free preset must not create a model")
 
-    monkeypatch.setattr("pageindex_rag.llm.chat_model", no_llm)
+    monkeypatch.setattr("toc_rag.llm.chat_model", no_llm)
     path = tmp_path / "notes.md"
     path.write_text("# Notes\n\nFirst point. Second point. Third point. Fourth point.\n", encoding="utf-8")
 
@@ -67,7 +67,7 @@ def test_options_are_recorded_and_no_llm_overrides_them(tmp_path, settings):
 def test_committed_sample_indexes_still_load():
     from pathlib import Path
 
-    from pageindex_rag.models import DocumentIndex
+    from toc_rag.models import DocumentIndex
 
     paths = sorted(Path(__file__).resolve().parents[1].glob("samples/index/docs/*/index.json"))
     assert paths
@@ -76,7 +76,7 @@ def test_committed_sample_indexes_still_load():
 
 
 def test_doc_id_comes_from_the_name_and_content(tmp_path):
-    from pageindex_rag.indexing.pipeline import doc_id_for, make_doc_id
+    from toc_rag.indexing.pipeline import doc_id_for, make_doc_id
 
     path = tmp_path / "Ship Manual.md"
     path.write_bytes(b"# Ship\n")

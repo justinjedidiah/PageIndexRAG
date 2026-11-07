@@ -4,10 +4,10 @@ import anthropic
 import httpx
 from langchain_core.runnables import RunnableLambda
 
-from pageindex_rag.errors import friendly_error
-from pageindex_rag.indexing import build_index, enrich_index, estimate_index
-from pageindex_rag.indexing.summarize import _ImageDescription, _NodeSummary
-from pageindex_rag.storage import Store
+from toc_rag.errors import friendly_error
+from toc_rag.indexing import build_index, enrich_index, estimate_index
+from toc_rag.indexing.summarize import _ImageDescription, _NodeSummary
+from toc_rag.storage import Store
 
 from .conftest import make_noisy_png, make_png
 
@@ -62,7 +62,7 @@ def test_enrich_summarizes_bottom_up_and_reports_progress(tmp_path, settings, mo
     store, index = make_doc(tmp_path, settings)
     llm = FakeLLM()
     keys = []
-    monkeypatch.setattr("pageindex_rag.llm.chat_model", lambda model, api_key=None, **kw: keys.append(api_key) or llm)
+    monkeypatch.setattr("toc_rag.llm.chat_model", lambda model, api_key=None, **kw: keys.append(api_key) or llm)
     progress = []
 
     enrich_index(index, store, settings, api_key="visitor-key", on_progress=lambda *args: progress.append(args))
@@ -98,7 +98,7 @@ def test_enrich_propagates_llm_failures(tmp_path, settings, monkeypatch):
         def _respond(self, schema, prompt):
             raise RuntimeError("boom")
 
-    monkeypatch.setattr("pageindex_rag.llm.chat_model", lambda model, api_key=None, **kw: Broken())
+    monkeypatch.setattr("toc_rag.llm.chat_model", lambda model, api_key=None, **kw: Broken())
     try:
         enrich_index(index, store, settings)
     except RuntimeError as exc:
@@ -127,7 +127,7 @@ def test_friendly_error_never_echoes_the_raw_message():
 
 
 def test_estimate_follows_the_options(tmp_path, settings):
-    from pageindex_rag.indexing import preset_options
+    from toc_rag.indexing import preset_options
 
     store, index = make_doc(tmp_path, settings)
     free, budget, full = (estimate_index(index, store, preset_options(n, settings)) for n in ("free", "budget", "full"))
@@ -139,8 +139,8 @@ def test_estimate_follows_the_options(tmp_path, settings):
 
 
 def test_budget_options_skip_images_and_ask_for_short_summaries(tmp_path, settings, monkeypatch):
-    from pageindex_rag.indexing import preset_options
-    from pageindex_rag.indexing.summarize import _ShortNodeSummary
+    from toc_rag.indexing import preset_options
+    from toc_rag.indexing.summarize import _ShortNodeSummary
 
     store, index = make_doc(tmp_path, settings)
     llm = FakeLLM()
@@ -148,7 +148,7 @@ def test_budget_options_skip_images_and_ask_for_short_summaries(tmp_path, settin
     original = llm.with_structured_output
     llm.with_structured_output = lambda schema: schemas.append(schema) or original(schema)
     caps = []
-    monkeypatch.setattr("pageindex_rag.llm.chat_model", lambda model, api_key=None, **kw: caps.append(kw) or llm)
+    monkeypatch.setattr("toc_rag.llm.chat_model", lambda model, api_key=None, **kw: caps.append(kw) or llm)
 
     enrich_index(index, store, settings, options=preset_options("budget", settings))
 
@@ -162,11 +162,11 @@ def test_budget_options_skip_images_and_ask_for_short_summaries(tmp_path, settin
 def test_a_stop_before_indexing_makes_no_claude_calls(tmp_path, settings, monkeypatch):
     import threading
 
-    from pageindex_rag.indexing import IndexingCancelled
+    from toc_rag.indexing import IndexingCancelled
 
     store, index = make_doc(tmp_path, settings)
     llm = FakeLLM()
-    monkeypatch.setattr("pageindex_rag.llm.chat_model", lambda model, api_key=None, **kw: llm)
+    monkeypatch.setattr("toc_rag.llm.chat_model", lambda model, api_key=None, **kw: llm)
     cancel = threading.Event()
     cancel.set()
     try:
@@ -182,12 +182,12 @@ def test_a_stop_during_indexing_starts_no_new_calls(tmp_path, settings, monkeypa
     import dataclasses
     import threading
 
-    from pageindex_rag.indexing import IndexingCancelled
+    from toc_rag.indexing import IndexingCancelled
 
     one_worker = dataclasses.replace(settings, index_workers=1)  # one call at a time, so the count is exact
     store, index = make_doc(tmp_path, one_worker)
     llm = FakeLLM()
-    monkeypatch.setattr("pageindex_rag.llm.chat_model", lambda model, api_key=None, **kw: llm)
+    monkeypatch.setattr("toc_rag.llm.chat_model", lambda model, api_key=None, **kw: llm)
     cancel = threading.Event()
     steps = []
 
@@ -208,11 +208,11 @@ def test_a_stop_during_indexing_starts_no_new_calls(tmp_path, settings, monkeypa
 
 
 def test_enrich_records_the_provider_and_models_but_never_the_key(tmp_path, settings, monkeypatch):
-    from pageindex_rag.indexing import preset_options
-    from pageindex_rag.providers import LLMConfig
+    from toc_rag.indexing import preset_options
+    from toc_rag.providers import LLMConfig
 
     store, index = make_doc(tmp_path, settings)
-    monkeypatch.setattr("pageindex_rag.llm.chat_model", lambda model, api_key=None, **kw: FakeLLM())
+    monkeypatch.setattr("toc_rag.llm.chat_model", lambda model, api_key=None, **kw: FakeLLM())
     llm = LLMConfig("openai", "sk-secret-123", index_model="small-model", agent_model="big-model")
 
     enrich_index(index, store, settings, options=preset_options("budget", settings), llm=llm)

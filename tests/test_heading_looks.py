@@ -3,10 +3,10 @@
 from docx import Document
 from docx.shared import Pt
 
-from pageindex_rag.indexing import build_index, preset_options
-from pageindex_rag.indexing.blocks import Heading, Paragraph
-from pageindex_rag.indexing.heading_looks import apply_heading_looks
-from pageindex_rag.storage import Store
+from toc_rag.indexing import build_index, preset_options
+from toc_rag.indexing.blocks import Heading, Paragraph
+from toc_rag.indexing.heading_looks import apply_heading_looks
+from toc_rag.storage import Store
 
 BODY = "This part explains the topic in detail and gives practical advice for owners of home solar systems."
 
@@ -130,7 +130,7 @@ def test_formatting_is_not_used_when_the_document_has_headings(tmp_path, setting
 
 # ---- inside a section too big to read in one go (documents with headings) ----
 
-from pageindex_rag.indexing.heading_looks import apply_section_looks  # noqa: E402
+from toc_rag.indexing.heading_looks import apply_section_looks  # noqa: E402
 
 LONG = BODY * 12  # about 300 tokens: over the small limit used below
 

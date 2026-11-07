@@ -2,9 +2,9 @@
 
 import reflex as rx
 
-from pageindex_rag.providers import PROVIDERS
+from toc_rag.providers import PROVIDERS
 
-from pageindex_rag.sessions import describe_duration
+from toc_rag.sessions import describe_duration
 
 from .runtime import settings
 from .state import MAX_LEAF_CHOICES, MIN_LEAF_CHOICES, UPLOAD_ID, State
@@ -888,7 +888,7 @@ def header() -> rx.Component:
     return rx.hstack(
         rx.center(rx.icon("book-open-text", size=18), width="36px", height="36px", border=BORDER, border_radius="10px", background=SURFACE),
         rx.vstack(
-            rx.text("PageIndex RAG", size="3", weight="bold"),
+            rx.text("TOC RAG", size="3", weight="bold"),
             rx.text("Vectorless RAG: chat by navigating a table of contents", size="1", color_scheme="gray", display=["none", "none", "block"]),
             spacing="0",
             align="start",

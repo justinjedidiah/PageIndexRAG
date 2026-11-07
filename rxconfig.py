@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 import reflex as rx
-from pageindex_rag.config import get_settings
+from toc_rag.config import get_settings
 
 
 def _keep_data_out_of_hot_reload() -> None:
@@ -47,7 +47,7 @@ def _public_address() -> dict[str, str]:
 
 
 config = rx.Config(
-    app_name="pageindex_app",
+    app_name="toc_app",
     plugins=[
         rx.plugins.RadixThemesPlugin(
             theme=rx.theme(appearance="light", accent_color="gray", gray_color="sand", radius="large")

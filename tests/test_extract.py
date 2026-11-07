@@ -2,9 +2,9 @@ import io
 
 from docx import Document
 
-from pageindex_rag.indexing.blocks import Heading, Image, Paragraph, Table
-from pageindex_rag.indexing.docx_extract import extract_docx
-from pageindex_rag.indexing.markdown_extract import extract_markdown
+from toc_rag.indexing.blocks import Heading, Image, Paragraph, Table
+from toc_rag.indexing.docx_extract import extract_docx
+from toc_rag.indexing.markdown_extract import extract_markdown
 
 from .conftest import make_png
 

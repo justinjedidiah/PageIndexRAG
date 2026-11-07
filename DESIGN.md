@@ -1,4 +1,4 @@
-# Design: PageIndex-style vectorless RAG
+# Design: TOC RAG, PageIndex-style vectorless RAG
 
 Retrieval by navigating a document's table-of-contents tree with an LLM agent, instead of embedding similarity (vector RAG). Inspired by PageIndex (VectifyAI). Not the IBM "STAIR" paper, which is a trained generative retriever and a different approach.
 
@@ -63,7 +63,7 @@ Library: a root node whose children are documents, each with a one-paragraph sum
 - LLM: Anthropic, OpenAI or Google Gemini through LangChain (`langchain-anthropic`, `langchain-openai`, `langchain-google-genai`); everything provider-specific is in `providers.py`. The rest uses LangChain's common interface: tool calls, structured output, image input.
   - The visitor picks the provider, then pastes a key. Checking the key = listing the models it can use (free). The visitor then picks both models (indexing, chat) from that list: nothing is pre-selected and the code names no models, so nothing goes stale. Chat waits for a chat model; indexing with summaries or image descriptions waits for an indexing model.
   - Two roles. Indexing (summaries, split titles, image descriptions; later ToC parsing/generation): a small, cheap model. Agent (branch choice, judging, final answer): a stronger one that supports tool calling.
-  - The dev CLI and the sample builder take their models from `PAGEINDEX_INDEX_MODEL` and `PAGEINDEX_AGENT_MODEL`.
+  - The dev CLI and the sample builder take their models from `TOC_RAG_INDEX_MODEL` and `TOC_RAG_AGENT_MODEL`.
   - Tight output caps on summaries only for Anthropic: OpenAI and Gemini models may spend output tokens on hidden reasoning first, so they get a generous cap.
   - Errors and refusals are recognised for all three (LangChain's standard error types, HTTP status, each provider's refusal signal).
   - Use prompt caching for the repeated tree prefix in agent calls.
@@ -81,7 +81,14 @@ Library: a root node whose children are documents, each with a one-paragraph sum
 ## Future work
 - LLM-assisted splitting: an option where the LLM picks topic boundaries inside an oversized section (and titles the parts) instead of size-based cuts.
 - LLM-generated ToC for documents with no ToC or a poor one (see stage 3).
-- Sub-heading detection inside big sections (bold, numbering, font size) before cutting by size.
+- Agent reliability (found on a real report: the agent read "Contents", found nothing and gave up). In order:
+  1. A small eval first: 15-20 questions with known answers over a real report and the samples, run with a real key, recording found / right section cited / steps. Measure before and after each change below (and later against a vector-RAG baseline).
+  2. Mark reference sections (Contents, References, Bibliography, Endnotes, Notes to graphs, Index) at index time; listings show them as "(reference)" and the agent skips them unless asked. Drop a contents page's text even when it sits inside a bookmarked section.
+  3. Whole-outline view: on opening a document, show every title with its id at once (about 3k tokens for 130 sections), as PageIndex does, falling back to levels for very large documents.
+  4. Check "not found" in code: with steps left, send the agent back once with the list of what it has not opened yet (not a generic "try again").
+  5. Optional keyword search tool (`search("ASEAN investment")`, exact words, still vectorless), an Agent settings switch off by default, shown in the path.
+- Let the agent look at pictures (an Agent settings option, off by default): images in tool results for Anthropic, a separate message for OpenAI; about 1,000-1,500 tokens per picture per step.
+- Public-app hardening before deploying: read at most one or two documents at a time (others queued and shown as such), a time limit per document read, measured peak memory for a large PDF to size the server, per-visitor rate limits on uploads and questions.
 
 ## Open questions
 - Thresholds: max 2000 / min 150 tokens and listing depth 2 are starting defaults; tune them with the eval below.

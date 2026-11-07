@@ -1,7 +1,7 @@
-# PageIndex RAG: the Reflex web app in one container, frontend and backend on one port.
+# TOC RAG: the Reflex web app in one container, frontend and backend on one port.
 #
-#   docker build -t pageindex-rag .
-#   docker run -p 8000:8000 pageindex-rag            # then open http://localhost:8000
+#   docker build -t toc-rag .
+#   docker run -p 8000:8000 toc-rag            # then open http://localhost:8000
 #
 # Never pass an API key to this container: the app only ever uses the key each visitor enters.
 # On a public host, set API_URL to the app's public address (on Railway it is filled in for you).

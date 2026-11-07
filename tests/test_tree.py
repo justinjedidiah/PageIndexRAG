@@ -1,6 +1,6 @@
-from pageindex_rag.indexing.blocks import Heading, Image, Paragraph, Table
-from pageindex_rag.indexing.split import split_large_nodes
-from pageindex_rag.indexing.tree import build_tree
+from toc_rag.indexing.blocks import Heading, Image, Paragraph, Table
+from toc_rag.indexing.split import split_large_nodes
+from toc_rag.indexing.tree import build_tree
 
 
 def test_nests_blocks_under_headings():
@@ -57,7 +57,7 @@ def test_small_nodes_are_not_split():
 
 
 def test_split_parts_are_balanced():
-    from pageindex_rag.indexing.split import estimate_tokens, split_text
+    from toc_rag.indexing.split import estimate_tokens, split_text
 
     paragraphs = ["x" * 160] * 5  # 40 tokens each, 200 in all, limit 150: two parts, not 150 + 50
     chunks = split_text("\n\n".join(paragraphs), 150)
@@ -67,7 +67,7 @@ def test_split_parts_are_balanced():
 
 
 def test_a_giant_paragraph_is_split_on_sentences():
-    from pageindex_rag.indexing.split import split_text
+    from toc_rag.indexing.split import split_text
 
     sentences = [f"Sentence number {i} says something useful." for i in range(40)]
     chunks = split_text(" ".join(sentences), 100)
@@ -77,7 +77,7 @@ def test_a_giant_paragraph_is_split_on_sentences():
 
 
 def test_a_big_table_is_split_by_rows_with_the_header_repeated():
-    from pageindex_rag.indexing.split import split_text
+    from toc_rag.indexing.split import split_text
 
     header = "| Part | Count |\n| --- | --- |"
     rows = [f"| part-{i:03d} | {i} |" for i in range(60)]
@@ -91,7 +91,7 @@ def test_a_big_table_is_split_by_rows_with_the_header_repeated():
 
 
 def test_an_image_stays_with_its_paragraph():
-    from pageindex_rag.indexing.split import split_text
+    from toc_rag.indexing.split import split_text
 
     text = "\n\n".join(["a" * 160, "b" * 160, "[image:img-1]", "c" * 160, "d" * 160])
     chunks = split_text(text, 90)
@@ -101,7 +101,7 @@ def test_an_image_stays_with_its_paragraph():
 
 
 def test_a_word_longer_than_the_limit_is_hard_cut():
-    from pageindex_rag.indexing.split import split_text
+    from toc_rag.indexing.split import split_text
 
     chunks = split_text("z" * 1000, 50)
     assert "".join(chunks) == "z" * 1000

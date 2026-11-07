@@ -1,6 +1,6 @@
 # 04. Supporting modules: settings, keys, sessions, uploads, library
 
-Files covered: `config.py`, `providers.py`, `llm.py`, `errors.py`, `sessions.py`, `uploads.py`, `library.py`, `outline.py`, `cli.py` (all in `src/pageindex_rag/`).
+Files covered: `config.py`, `providers.py`, `llm.py`, `errors.py`, `sessions.py`, `uploads.py`, `library.py`, `outline.py`, `cli.py` (all in `src/toc_rag/`).
 
 These are the small modules that the indexing code (file 02), the agent (file 03) and the web app (file 05) all lean on. Several of them exist mainly for **security and privacy**, which matters because the finished app is public and handles other people's API keys and documents.
 
@@ -14,7 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 ```
 
 - `load_dotenv()` reads the project's `.env` file and copies each `NAME=value` line into the process's **environment variables**. That is how your `ANTHROPIC_API_KEY` reaches the program without being in the code.
-- `PROJECT_ROOT`: `__file__` is the path of `config.py`; `.resolve()` makes it absolute; `.parents[2]` goes up from `src/pageindex_rag/` -> `src/` -> the project folder. It lets the default for the samples folder work no matter where the program is started from.
+- `PROJECT_ROOT`: `__file__` is the path of `config.py`; `.resolve()` makes it absolute; `.parents[2]` goes up from `src/toc_rag/` -> `src/` -> the project folder. It lets the default for the samples folder work no matter where the program is started from.
 
 ```python
 @dataclass(frozen=True)
@@ -38,9 +38,9 @@ A **frozen dataclass**: a bundle of settings that cannot be changed after creati
 ```python
 def get_settings() -> Settings:
     return Settings(
-        data_dir=Path(os.getenv("PAGEINDEX_DATA_DIR", "data")),
-        provider=provider,                       # PAGEINDEX_PROVIDER, default "anthropic"
-        index_model=os.getenv("PAGEINDEX_INDEX_MODEL", ""),   # no default models: the CLI must name them
+        data_dir=Path(os.getenv("TOC_RAG_DATA_DIR", "data")),
+        provider=provider,                       # TOC_RAG_PROVIDER, default "anthropic"
+        index_model=os.getenv("TOC_RAG_INDEX_MODEL", ""),   # no default models: the CLI must name them
         ...
 ```
 
@@ -49,21 +49,21 @@ def get_settings() -> Settings:
 | Environment variable | Default | Meaning |
 |---|---|---|
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GOOGLE_API_KEY` | none | Only for the command line and sample building. **Never** set on a public server. |
-| `PAGEINDEX_PROVIDER` | `anthropic` | Provider for the CLI: `anthropic`, `openai` or `google`. The web app uses each visitor's choice. |
-| `PAGEINDEX_DATA_DIR` | `data` | Where files are stored. Relative to the folder you run from. |
-| `PAGEINDEX_INDEX_MODEL` | none (required by the CLI to index with an LLM) | Writes section summaries |
-| `PAGEINDEX_VISION_MODEL` | the index model | Describes images |
-| `PAGEINDEX_AGENT_MODEL` | none (required by `pageindex ask`) | Navigates and answers; must support tool calling |
-| `PAGEINDEX_MAX_LEAF_TOKENS` | 2000 | Sections bigger than this get split |
-| `PAGEINDEX_AGENT_MAX_STEPS` | 15 | Agent step budget |
-| `PAGEINDEX_SESSION_TTL_SECONDS` | 7200 | Session lifetime (2 hours) |
-| `PAGEINDEX_MAX_UPLOAD_MB` | 15 | Upload size cap |
-| `PAGEINDEX_MAX_SESSION_DOCS` | 5 | Documents per visitor |
-| `PAGEINDEX_INDEX_WORKERS` | 6 | Parallel model calls while indexing |
-| `PAGEINDEX_SAMPLES_DIR` | `samples/index` | The shared sample library |
-| `PAGEINDEX_LLM_FACTORY` | none | Test hook: swap in the fake model (file 06) |
+| `TOC_RAG_PROVIDER` | `anthropic` | Provider for the CLI: `anthropic`, `openai` or `google`. The web app uses each visitor's choice. |
+| `TOC_RAG_DATA_DIR` | `data` | Where files are stored. Relative to the folder you run from. |
+| `TOC_RAG_INDEX_MODEL` | none (required by the CLI to index with an LLM) | Writes section summaries |
+| `TOC_RAG_VISION_MODEL` | the index model | Describes images |
+| `TOC_RAG_AGENT_MODEL` | none (required by `tocrag ask`) | Navigates and answers; must support tool calling |
+| `TOC_RAG_MAX_LEAF_TOKENS` | 2000 | Sections bigger than this get split |
+| `TOC_RAG_AGENT_MAX_STEPS` | 15 | Agent step budget |
+| `TOC_RAG_SESSION_TTL_SECONDS` | 7200 | Session lifetime (2 hours) |
+| `TOC_RAG_MAX_UPLOAD_MB` | 15 | Upload size cap |
+| `TOC_RAG_MAX_SESSION_DOCS` | 5 | Documents per visitor |
+| `TOC_RAG_INDEX_WORKERS` | 6 | Parallel model calls while indexing |
+| `TOC_RAG_SAMPLES_DIR` | `samples/index` | The shared sample library |
+| `TOC_RAG_LLM_FACTORY` | none | Test hook: swap in the fake model (file 06) |
 
-The web app calls `get_settings()` once at start-up (`pageindex_app/runtime.py`) and shares that object.
+The web app calls `get_settings()` once at start-up (`toc_app/runtime.py`) and shares that object.
 
 ---
 
@@ -93,7 +93,7 @@ class LLMConfig:
 
 One visitor's (or the CLI's) choice, passed to indexing (`enrich_index(..., llm=...)`) and chat (`stream_ask(..., llm_config=...)`). `repr=False` on the key means printing a config, or logging one by mistake, never shows the key.
 
-**`chat_model(config, model, max_tokens)`** is the only place a model is created (an empty model name raises `NoModelChosen`, with a message saying how to choose one): `ChatAnthropic`, `ChatOpenAI` or `ChatGoogleGenerativeAI`. The test hook `PAGEINDEX_LLM_FACTORY` (for example `tests.fake_llm:make_model`) swaps in the offline model instead. The key is passed only when given; with none, LangChain falls back to the provider's environment variable, which is why it must never be set on a public server: the app must only ever spend *the visitor's* key.
+**`chat_model(config, model, max_tokens)`** is the only place a model is created (an empty model name raises `NoModelChosen`, with a message saying how to choose one): `ChatAnthropic`, `ChatOpenAI` or `ChatGoogleGenerativeAI`. The test hook `TOC_RAG_LLM_FACTORY` (for example `tests.fake_llm:make_model`) swaps in the offline model instead. The key is passed only when given; with none, LangChain falls back to the provider's environment variable, which is why it must never be set on a public server: the app must only ever spend *the visitor's* key.
 
 **Output caps.** Summaries are capped at 256 or 512 output tokens on Anthropic. OpenAI and Gemini models can spend output tokens on hidden reasoning before answering, so a tight cap could leave no room for the answer; they get a generous cap (`LLMConfig.output_cap`). The prompt sets the summary length either way.
 
@@ -413,10 +413,10 @@ The URL is built by a function the caller passes in (`image_url`), so this modul
 
 ## `cli.py`: the developer command line
 
-Installed as the command `pageindex` (declared under `[project.scripts]` in `pyproject.toml`). It is **not part of the product**: it is a developer tool to index and test without the web page.
+Installed as the command `tocrag` (declared under `[project.scripts]` in `pyproject.toml`). It is **not part of the product**: it is a developer tool to index and test without the web page.
 
 ```python
-parser = argparse.ArgumentParser(prog="pageindex")
+parser = argparse.ArgumentParser(prog="tocrag")
 commands = parser.add_subparsers(dest="command", required=True)
 index_cmd = commands.add_parser("index", ...)
 index_cmd.add_argument("path")
@@ -426,6 +426,6 @@ index_cmd.add_argument("--no-llm", action="store_true", ...)
 
 The `index` branch calls `index_document`; `list` prints the library; `tree` prints a document's tree with `_print_tree` (recursion again; a `*` marks generated nodes and the text length helps spot huge ones); `ask` loads the documents and iterates `stream_ask`: it prints each step as `  > Opened "..."`, then the answer, citations and images.
 
-Imports like `from .indexing import index_document` sit **inside** the `if` branches so a quick `pageindex list` does not load the heavy AI libraries.
+Imports like `from .indexing import index_document` sit **inside** the `if` branches so a quick `tocrag list` does not load the heavy AI libraries.
 
-The CLI uses the provider in `PAGEINDEX_PROVIDER` and its key in your `.env` (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `GOOGLE_API_KEY`), unlike the web app, which only uses the visitor's.
+The CLI uses the provider in `TOC_RAG_PROVIDER` and its key in your `.env` (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `GOOGLE_API_KEY`), unlike the web app, which only uses the visitor's.

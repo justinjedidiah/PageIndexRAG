@@ -1,4 +1,4 @@
-"""Reflex state: thin glue between the page and the pageindex_rag package.
+"""Reflex state: thin glue between the page and the toc_rag package.
 
 Helper methods start with an underscore so Reflex does not turn them into events.
 """
@@ -13,9 +13,9 @@ from pathlib import Path
 from typing import Any
 
 import reflex as rx
-from pageindex_rag.agent import AnswerResult, ChatTurn, Draft, Step, stream_ask
-from pageindex_rag.errors import friendly_error
-from pageindex_rag.indexing import (
+from toc_rag.agent import AnswerResult, ChatTurn, Draft, Step, stream_ask
+from toc_rag.errors import friendly_error
+from toc_rag.indexing import (
     DEFAULT_PRESET,
     PRESET_NAMES,
     DocumentRejected,
@@ -25,15 +25,15 @@ from pageindex_rag.indexing import (
     enrich_index,
     estimate_index,
 )
-from pageindex_rag.indexing.estimate import count_describable_images
-from pageindex_rag.indexing.options import PRESET_DESCRIPTIONS, PRESET_LABELS, matching_preset, preset_options
-from pageindex_rag.indexing.pdf_cache import forget as forget_saved_read
-from pageindex_rag.indexing.pipeline import doc_id_for
-from pageindex_rag.library import SAMPLE_SCOPE, Library
-from pageindex_rag.providers import PROVIDER_IDS, PROVIDERS, LLMConfig, list_models
-from pageindex_rag.models import DocumentIndex, IndexOptions
-from pageindex_rag.outline import node_markdown, outline_rows
-from pageindex_rag.uploads import UploadError, safe_filename, validate_upload
+from toc_rag.indexing.estimate import count_describable_images
+from toc_rag.indexing.options import PRESET_DESCRIPTIONS, PRESET_LABELS, matching_preset, preset_options
+from toc_rag.indexing.pdf_cache import forget as forget_saved_read
+from toc_rag.indexing.pipeline import doc_id_for
+from toc_rag.library import SAMPLE_SCOPE, Library
+from toc_rag.providers import PROVIDER_IDS, PROVIDERS, LLMConfig, list_models
+from toc_rag.models import DocumentIndex, IndexOptions
+from toc_rag.outline import node_markdown, outline_rows
+from toc_rag.uploads import UploadError, safe_filename, validate_upload
 
 from .runtime import sessions, settings
 from .viewmodels import ChatMessage, CitationView, DocView, ImageView, OutlineRowView, PageView, PresetView, StepView

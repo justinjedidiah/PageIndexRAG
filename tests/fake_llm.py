@@ -1,6 +1,6 @@
 """An offline stand-in for Claude, for running the app end to end without an API key.
 
-    PAGEINDEX_LLM_FACTORY=tests.fake_llm:make_model
+    TOC_RAG_LLM_FACTORY=tests.fake_llm:make_model
 
 It writes summaries from the section text and navigates by keyword overlap with the question.
 It is deliberately simple: the point is to exercise the app, not to answer well.
@@ -52,7 +52,7 @@ def tool_call(name: str, **args) -> AIMessage:
 
 def structured(schema, prompt):
     # Optional slowness for indexing calls, so a test can act while indexing is still running.
-    time.sleep(float(os.environ.get("PAGEINDEX_FAKE_INDEX_DELAY", "0")))
+    time.sleep(float(os.environ.get("TOC_RAG_FAKE_INDEX_DELAY", "0")))
     if schema.__name__ == "_ImageDescription":
         return schema(description="A bar chart with four colored bars of different heights.", tags=["chart", "bars"])
     title = re.search(r"Section title: (.*)", prompt).group(1)

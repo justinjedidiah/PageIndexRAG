@@ -3,10 +3,10 @@
 from docx import Document
 from docx.shared import Pt
 
-from pageindex_rag.indexing import build_index, preset_options
-from pageindex_rag.indexing.blocks import Heading, Paragraph, Table, TocLine
-from pageindex_rag.indexing.typed_toc import apply_typed_toc
-from pageindex_rag.storage import Store
+from toc_rag.indexing import build_index, preset_options
+from toc_rag.indexing.blocks import Heading, Paragraph, Table, TocLine
+from toc_rag.indexing.typed_toc import apply_typed_toc
+from toc_rag.storage import Store
 
 P = Paragraph
 BODY = "This part explains the topic in detail and gives practical advice."

@@ -7,7 +7,7 @@ Only plain image files inside a document's own folder are ever served.
 
 import re
 
-from pageindex_rag.library import SAMPLE_SCOPE, Library, image_media_type
+from toc_rag.library import SAMPLE_SCOPE, Library, image_media_type
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.concurrency import run_in_threadpool

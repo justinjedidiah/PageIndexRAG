@@ -1,6 +1,6 @@
 # 01. The data model and storage
 
-Files covered: `src/pageindex_rag/models.py`, `src/pageindex_rag/indexing/blocks.py`, `src/pageindex_rag/storage.py`.
+Files covered: `src/toc_rag/models.py`, `src/toc_rag/indexing/blocks.py`, `src/toc_rag/storage.py`.
 
 Start here. Every other part of the project either **builds** these shapes (indexing), **reads** them (the agent, the UI) or **saves** them (storage). If you understand these three files, the rest is just "who fills in which field, and when".
 

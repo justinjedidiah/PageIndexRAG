@@ -2,8 +2,8 @@ import io
 
 from PIL import Image
 
-from pageindex_rag.indexing.summarize import MAX_VISION_SIDE, prepare_for_vision, should_describe
-from pageindex_rag.models import ImageRecord
+from toc_rag.indexing.summarize import MAX_VISION_SIDE, prepare_for_vision, should_describe
+from toc_rag.models import ImageRecord
 
 from .conftest import make_noisy_png, make_png
 

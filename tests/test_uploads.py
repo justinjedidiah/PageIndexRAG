@@ -4,7 +4,7 @@ import zipfile
 import pytest
 from docx import Document
 
-from pageindex_rag.uploads import UploadError, safe_filename, validate_upload
+from toc_rag.uploads import UploadError, safe_filename, validate_upload
 
 MAX = 1024 * 1024
 

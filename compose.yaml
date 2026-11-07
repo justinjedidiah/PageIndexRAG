@@ -7,7 +7,7 @@
 services:
   app:
     build: .
-    image: pageindex-rag
+    image: toc-rag
     ports:
       - "8000:8000"
     environment:

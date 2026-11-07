@@ -1,6 +1,6 @@
 import pytest
 
-from pageindex_rag.sessions import SessionManager
+from toc_rag.sessions import SessionManager
 
 TOKEN = "abcd1234-token"
 

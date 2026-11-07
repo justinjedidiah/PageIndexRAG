@@ -3,7 +3,7 @@ import zlib
 
 import pytest
 
-from pageindex_rag.config import Settings
+from toc_rag.config import Settings
 
 
 def make_png(width: int = 2, height: int = 2) -> bytes:

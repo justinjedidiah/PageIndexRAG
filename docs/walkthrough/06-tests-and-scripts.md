@@ -18,7 +18,7 @@ The first two never contact Anthropic. The third is the only one that tells you 
 
 ```toml
 [project]
-name = "pageindex-rag"
+name = "toc-rag"
 requires-python = ">=3.11"
 dependencies = ["pydantic>=2.7", "python-docx>=1.1", "pillow>=10", "python-dotenv>=1.0",
                 "langchain-core>=0.3", "langchain-anthropic>=0.3", "langgraph>=0.2"]
@@ -28,7 +28,7 @@ app = ["reflex>=0.7"]
 dev = ["pytest>=8", "playwright>=1.45"]
 
 [project.scripts]
-pageindex = "pageindex_rag.cli:main"
+tocrag = "toc_rag.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -39,7 +39,7 @@ testpaths = ["tests"]
 
 - `dependencies` are what the **core** needs (data models, Word reading, images, config, AI libraries).
 - `optional-dependencies`: **extras** installed on request: `app` adds Reflex; `dev` adds the test tools. That is what `pip install -e ".[dev,app]"` means: install this project in *editable* mode (`-e`: changes to the code take effect immediately, no reinstall) plus both extras.
-- `[project.scripts]` creates the `pageindex` command and points it at the `main` function in `cli.py`.
+- `[project.scripts]` creates the `tocrag` command and points it at the `main` function in `cli.py`.
 - `where = ["src"]`: the importable code lives in the `src/` folder ("src layout"), so tests must import the *installed* package rather than accidentally picking up loose files.
 - `testpaths`: where pytest looks.
 
@@ -121,13 +121,13 @@ class FakeLLM:
     def with_structured_output(self, schema):
         return RunnableLambda(lambda prompt: self._respond(schema, prompt))
 ```
-`with_structured_output` returns a runnable that answers `_NodeSummary` or `_ImageDescription` requests from the prompt text (e.g. `About <title>.`), keeping a thread-safe record of every prompt. The tests assert, for example, that the **root's prompt contains the children's summaries** (proof of bottom-up order) and that the progress numbers run 1, 2, 3 ... up to the estimated total. `monkeypatch.setattr("pageindex_rag.llm.chat_model", ...)` temporarily replaces the real model factory for one test (and puts it back afterwards); this is why `enrich_index` imports `chat_model` *inside* its body.
+`with_structured_output` returns a runnable that answers `_NodeSummary` or `_ImageDescription` requests from the prompt text (e.g. `About <title>.`), keeping a thread-safe record of every prompt. The tests assert, for example, that the **root's prompt contains the children's summaries** (proof of bottom-up order) and that the progress numbers run 1, 2, 3 ... up to the estimated total. `monkeypatch.setattr("toc_rag.llm.chat_model", ...)` temporarily replaces the real model factory for one test (and puts it back afterwards); this is why `enrich_index` imports `chat_model` *inside* its body.
 
 ---
 
 ## `fake_llm.py`: the offline Claude
 
-This is the "fake model" used by the browser test (not a pytest file, a reusable stand-in). It is a `BaseChatModel` subclass `FakeChat`, handed out by `make_model(model)`, and selected via the `PAGEINDEX_LLM_FACTORY` variable (file 04). It handles the three kinds of request the app makes:
+This is the "fake model" used by the browser test (not a pytest file, a reusable stand-in). It is a `BaseChatModel` subclass `FakeChat`, handed out by `make_model(model)`, and selected via the `TOC_RAG_LLM_FACTORY` variable (file 04). It handles the three kinds of request the app makes:
 
 1. **Writing summaries** (`structured`, for `with_structured_output`). It reads the prompt text the real summarizer sends ("Section title: ...", "Section text: ...", "Subsections: ...") and returns the title plus a "summary" made by slicing the text: the section's own first 300 characters plus the first 240 characters of each child line (so a parent's summary carries the start of every child). For images it returns a fixed "bar chart" description.
 2. **Anything that isn't the agent** (e.g. the API-key check) gets `AIMessage("ok")`: it recognises the agent only by a phrase in its system prompt.

@@ -39,26 +39,26 @@ class Settings:
 def get_settings() -> Settings:
     from .providers import PROVIDERS
 
-    provider = os.getenv("PAGEINDEX_PROVIDER", "anthropic")
+    provider = os.getenv("TOC_RAG_PROVIDER", "anthropic")
     if provider not in PROVIDERS:
-        raise ValueError(f"PAGEINDEX_PROVIDER must be one of {', '.join(PROVIDERS)}, not {provider!r}.")
+        raise ValueError(f"TOC_RAG_PROVIDER must be one of {', '.join(PROVIDERS)}, not {provider!r}.")
     # No default models: the web app's visitors choose theirs; the dev CLI reads them from the environment.
-    index_model = os.getenv("PAGEINDEX_INDEX_MODEL", "")
+    index_model = os.getenv("TOC_RAG_INDEX_MODEL", "")
     return Settings(
-        data_dir=Path(os.getenv("PAGEINDEX_DATA_DIR", "data")),
+        data_dir=Path(os.getenv("TOC_RAG_DATA_DIR", "data")),
         provider=provider,
         index_model=index_model,
-        vision_model=os.getenv("PAGEINDEX_VISION_MODEL", index_model),
-        agent_model=os.getenv("PAGEINDEX_AGENT_MODEL", ""),
-        max_leaf_tokens=int(os.getenv("PAGEINDEX_MAX_LEAF_TOKENS", "2000")),
-        agent_max_steps=int(os.getenv("PAGEINDEX_AGENT_MAX_STEPS", "15")),
-        min_leaf_tokens=int(os.getenv("PAGEINDEX_MIN_LEAF_TOKENS", "150")),
-        agent_listing_depth=min(3, max(1, int(os.getenv("PAGEINDEX_LISTING_DEPTH", "2")))),
-        session_ttl_seconds=int(os.getenv("PAGEINDEX_SESSION_TTL_SECONDS", str(2 * 60 * 60))),
-        max_upload_bytes=int(os.getenv("PAGEINDEX_MAX_UPLOAD_MB", "15")) * 1024 * 1024,
-        max_session_docs=int(os.getenv("PAGEINDEX_MAX_SESSION_DOCS", "5")),
-        max_pdf_pages=int(os.getenv("PAGEINDEX_MAX_PDF_PAGES", "300")),
-        max_doc_tokens=int(os.getenv("PAGEINDEX_MAX_DOC_TOKENS", "500000")),
-        index_workers=int(os.getenv("PAGEINDEX_INDEX_WORKERS", "6")),
-        samples_dir=Path(os.getenv("PAGEINDEX_SAMPLES_DIR", str(PROJECT_ROOT / "samples" / "index"))),
+        vision_model=os.getenv("TOC_RAG_VISION_MODEL", index_model),
+        agent_model=os.getenv("TOC_RAG_AGENT_MODEL", ""),
+        max_leaf_tokens=int(os.getenv("TOC_RAG_MAX_LEAF_TOKENS", "2000")),
+        agent_max_steps=int(os.getenv("TOC_RAG_AGENT_MAX_STEPS", "15")),
+        min_leaf_tokens=int(os.getenv("TOC_RAG_MIN_LEAF_TOKENS", "150")),
+        agent_listing_depth=min(3, max(1, int(os.getenv("TOC_RAG_LISTING_DEPTH", "2")))),
+        session_ttl_seconds=int(os.getenv("TOC_RAG_SESSION_TTL_SECONDS", str(2 * 60 * 60))),
+        max_upload_bytes=int(os.getenv("TOC_RAG_MAX_UPLOAD_MB", "15")) * 1024 * 1024,
+        max_session_docs=int(os.getenv("TOC_RAG_MAX_SESSION_DOCS", "5")),
+        max_pdf_pages=int(os.getenv("TOC_RAG_MAX_PDF_PAGES", "300")),
+        max_doc_tokens=int(os.getenv("TOC_RAG_MAX_DOC_TOKENS", "500000")),
+        index_workers=int(os.getenv("TOC_RAG_INDEX_WORKERS", "6")),
+        samples_dir=Path(os.getenv("TOC_RAG_SAMPLES_DIR", str(PROJECT_ROOT / "samples" / "index"))),
     )

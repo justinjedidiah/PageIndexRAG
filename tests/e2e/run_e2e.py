@@ -87,18 +87,18 @@ def make_plain_docx(path: Path) -> None:
 def main() -> int:
     out = Path(sys.argv[1] if len(sys.argv) > 1 else tempfile.mkdtemp(prefix="e2e-shots-"))
     out.mkdir(parents=True, exist_ok=True)
-    work = Path(tempfile.mkdtemp(prefix="pageindex-e2e-"))
+    work = Path(tempfile.mkdtemp(prefix="toc-rag-e2e-"))
     data, samples = work / "data", work / "samples"
     env = {
         **os.environ,
         "PYTHONPATH": str(ROOT),
         "PYTHONUNBUFFERED": "1",
-        "PAGEINDEX_LLM_FACTORY": "tests.fake_llm:make_model",
-        "PAGEINDEX_DATA_DIR": str(data),
-        "PAGEINDEX_SAMPLES_DIR": str(samples),
+        "TOC_RAG_LLM_FACTORY": "tests.fake_llm:make_model",
+        "TOC_RAG_DATA_DIR": str(data),
+        "TOC_RAG_SAMPLES_DIR": str(samples),
         # The sample build runs without the UI, so it needs model names; the offline model ignores them.
-        "PAGEINDEX_INDEX_MODEL": "offline-index",
-        "PAGEINDEX_AGENT_MODEL": "offline-agent",
+        "TOC_RAG_INDEX_MODEL": "offline-index",
+        "TOC_RAG_AGENT_MODEL": "offline-agent",
     }
     env.pop("ANTHROPIC_API_KEY", None)
 
@@ -108,7 +108,7 @@ def main() -> int:
     )
     log_path = out / "server.log"
     # Each indexing call takes a moment in the app, so "End session" can be pressed while indexing runs.
-    server_env = {**env, "PAGEINDEX_FAKE_INDEX_DELAY": "0.5"}
+    server_env = {**env, "TOC_RAG_FAKE_INDEX_DELAY": "0.5"}
     with log_path.open("wb") as log:
         server = subprocess.Popen([sys.executable, "-m", "reflex", "run"], cwd=ROOT, env=server_env, stdout=log, stderr=subprocess.STDOUT)
     try:
@@ -176,7 +176,7 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
         page.goto(FRONTEND, wait_until="networkidle", timeout=90000)
 
         def loads() -> None:
-            expect(page.get_by_text("PageIndex RAG").first).to_be_visible(timeout=30000)
+            expect(page.get_by_text("TOC RAG").first).to_be_visible(timeout=30000)
             expect(page.get_by_text("sample", exact=True)).to_have_count(3, timeout=15000)
             expect(page.get_by_placeholder("Add your API key to chat")).to_be_disabled()
             expect(page.get_by_text("Uploads are kept for 2 hours")).to_be_visible()  # no session yet

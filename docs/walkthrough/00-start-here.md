@@ -9,7 +9,7 @@ This folder explains the whole project down to the code, one area per file. Read
 | [02-indexing.md](02-indexing.md) | `indexing/*`: turning a file into a searchable tree |
 | [03-agent.md](03-agent.md) | `agent/*`: how a question is answered (the loop, the tools, how citations are parsed) |
 | [04-support-modules.md](04-support-modules.md) | `config`, `llm`, `errors`, `sessions`, `uploads`, `library`, `outline`, `cli` |
-| [05-web-app.md](05-web-app.md) | `pageindex_app/*`: the website (Reflex) |
+| [05-web-app.md](05-web-app.md) | `toc_app/*`: the website (Reflex) |
 | [06-tests-and-scripts.md](06-tests-and-scripts.md) | Tests, the offline fake model, the browser test, the sample builder, and a list of rough edges |
 
 These explain the code **as it is now**, including the parts your other session redesigned. If code changes, the explanations can fall out of date; the code is always the truth.
@@ -25,8 +25,8 @@ Instead of chopping documents into chunks and searching by similarity (vector RA
 ## The map of the project
 
 ```
-PageIndexRAG/
-├─ src/pageindex_rag/           THE CORE. No web code in here. Usable from a script.
+TOC-RAG/
+├─ src/toc_rag/           THE CORE. No web code in here. Usable from a script.
 │   ├─ models.py                the data shapes: Node, DocumentIndex, ImageRecord...      (01)
 │   ├─ storage.py               save/load those shapes as JSON files                      (01)
 │   ├─ indexing/
@@ -52,14 +52,14 @@ PageIndexRAG/
 │   ├─ uploads.py               checking uploaded files                                   (04)
 │   ├─ library.py               what one visitor sees: samples + their own documents      (04)
 │   ├─ outline.py               outline rows and section text for display                (04)
-│   └─ cli.py                   developer command line (`pageindex ...`)                  (04)
-├─ pageindex_app/               THE WEBSITE (Reflex). Imports the core, never the reverse.
+│   └─ cli.py                   developer command line (`tocrag ...`)                  (04)
+├─ toc_app/               THE WEBSITE (Reflex). Imports the core, never the reverse.
 │   ├─ state.py                 every button's behaviour                                  (05)
 │   ├─ views.py                 what the page looks like                                  (05)
 │   ├─ files.py                 serves document images                                    (05)
 │   ├─ viewmodels.py            small data shapes for the page                            (05)
 │   ├─ runtime.py               shared settings + session manager                         (05)
-│   └─ pageindex_app.py         the app, its page, the 5-minute cleanup loop              (05)
+│   └─ toc_app.py         the app, its page, the 5-minute cleanup loop              (05)
 ├─ rxconfig.py, assets/app.css  Reflex configuration, theme, stylesheet                   (05)
 ├─ samples/source, samples/index   the 3 sample documents and their indexes               (06)
 ├─ scripts/build_samples.py     makes the sample documents and indexes them               (06)
@@ -159,5 +159,5 @@ Visitor clicks a citation
 | Improve PDF reading | `indexing/pdf_extract.py` (02): lines to paragraphs, bookmarks; page ranges in `indexing/pages.py` |
 | Change the page's look | `views.py`, `rxconfig.py`, `assets/app.css` (05) |
 | Change what a button does | the handler in `state.py` (05) |
-| Change the session lifetime | `PAGEINDEX_SESSION_TTL_SECONDS` (04) |
+| Change the session lifetime | `TOC_RAG_SESSION_TTL_SECONDS` (04) |
 | Add a test | the matching `tests/test_*.py` (06) |

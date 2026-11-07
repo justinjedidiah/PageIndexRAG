@@ -10,7 +10,7 @@ from .storage import Store
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(prog="pageindex")
+    parser = argparse.ArgumentParser(prog="tocrag")
     commands = parser.add_subparsers(dest="command", required=True)
 
     index_cmd = commands.add_parser("index", help="index a .docx or .md file")
@@ -44,7 +44,7 @@ def main(argv: list[str] | None = None) -> None:
 
         options = _index_options(args, settings)
         if options.uses_llm and not settings.index_model:
-            parser.error("set PAGEINDEX_INDEX_MODEL in .env to a model of your provider, or use --preset free")
+            parser.error("set TOC_RAG_INDEX_MODEL in .env to a model of your provider, or use --preset free")
         index = index_document(args.path, store, settings, options=options)
         options = index.options
         print(f"Indexed {index.doc_id}: {sum(1 for _ in index.root.walk())} nodes, {len(index.images)} images")
@@ -69,7 +69,7 @@ def main(argv: list[str] | None = None) -> None:
         if not doc_ids:
             parser.error("no documents indexed yet")
         if not settings.agent_model:
-            parser.error("set PAGEINDEX_AGENT_MODEL in .env to a model of your provider (one that supports tool calling)")
+            parser.error("set TOC_RAG_AGENT_MODEL in .env to a model of your provider (one that supports tool calling)")
         if args.listing_depth:
             settings = replace(settings, agent_listing_depth=args.listing_depth)
         for event in stream_ask([store.load_index(doc_id) for doc_id in doc_ids], args.question, settings):
