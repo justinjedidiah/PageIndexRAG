@@ -239,10 +239,198 @@ def how_it_works() -> rx.Component:
             spacing="4",
             width="100%",
         ),
+        rx.el.a(
+            rx.hstack(rx.text("How the index is built", size="2", weight="medium"), rx.icon("arrow-down", size=14), spacing="1", align="center"),
+            href="#indexing",
+            style={"color": "var(--gray-12)", "text-decoration": "none", "display": "inline-block", "margin-top": "1.5em"},
+        ),
         id="how-it-works",
         background="var(--gray-2)",
         border_top=BORDER,
         border_bottom=BORDER,
+    )
+
+
+# ---- inside the index ----
+
+# How the outline is found: cheapest first, the first believable one wins (indexing/pipeline.py and DESIGN.md).
+OUTLINE_SOURCES = [
+    ("Its own outline", "Word's heading styles, or a PDF's bookmarks."),
+    ("A printed contents page", "Trusted only if its entries are found in the text (in a PDF, on the pages they point to)."),
+    ("Lines that look like headings", "Short, bold or larger, and recurring. A one-off big title or a pull quote stays text."),
+    ("No structure at all", "The text is cut into parts small enough to read in one go."),
+]
+
+# An example outline before and after refinement (refine.py, split.py): (depth, title, note, badge colour).
+TREE_BEFORE = [
+    (0, "1  Introduction", "90 tokens", ""),
+    (0, "2  Scope", "120 tokens", ""),
+    (0, "3  Safety procedures", "9,400 tokens", ""),
+    (0, "4  Contacts", "60 tokens", ""),
+]
+TREE_AFTER = [
+    (0, "Introduction · Scope", "merged", "blue"),
+    (0, "Safety procedures", "split", "amber"),
+    (1, "Evacuation", "found by its look", "grass"),
+    (1, "Fire safety", "found by its look", "grass"),
+    (1, "Spill response", "found by its look", "grass"),
+    (2, "“Report a spill within ten minutes…”", "cut by size", "amber"),
+    (2, "“Neutralise acids with…”", "cut by size", "amber"),
+    (0, "Contacts", "kept", "gray"),
+]
+TREE_RULES = [
+    ("amber", "Too big to read in one go", "Over 2,000 tokens. Its own sub-headings are looked for first; what is still too big is cut between paragraphs, each part titled by its first sentence."),
+    ("blue", "Tiny neighbours", "Under 150 tokens each. Joined into one section named after both, so the agent opens one instead of several."),
+    ("gray", "Everything else", "Kept exactly as the author wrote it."),
+]
+SECTION_PARTS = [
+    ("notebook-pen", "A summary", "What questions the section answers, written by a small model. On the free preset, its first sentences instead."),
+    ("map-pin", "Its location", "Printed page numbers for a PDF, the heading path for Word, so every citation says where to look."),
+    ("image", "Its pictures", "Charts and photos from the document. On the Full preset a vision model describes each one, so the agent can find it."),
+]
+
+
+def _outline_source(number: int, title: str, text: str, last: bool) -> rx.Component:
+    """One rung of the fallback chain: a numbered dot, joined to the next by a line labelled "else"."""
+    return rx.hstack(
+        rx.vstack(
+            rx.center(rx.text(str(number), size="1", weight="bold"), width="26px", height="26px", border_radius="50%", background="var(--gray-12)", color="var(--gray-1)", flex_shrink="0"),
+            *([] if last else [rx.box(width="2px", flex="1", min_height="18px", background="var(--gray-5)")]),
+            spacing="1",
+            align="center",
+            align_self="stretch",
+        ),
+        rx.vstack(
+            rx.text(title, size="3", weight="bold"),
+            rx.text(text, size="2", color_scheme="gray"),
+            *([] if last else [rx.text("else", size="1", color_scheme="gray", style={"font-style": "italic"})]),
+            spacing="1",
+            align="start",
+            padding_bottom="0.25em",
+        ),
+        spacing="3",
+        align="start",
+        width="100%",
+    )
+
+
+def _tree_row(depth: int, title: str, note: str, color: str) -> rx.Component:
+    return rx.hstack(
+        rx.text(title, size="2", weight="medium" if depth == 0 else "regular", white_space="nowrap", overflow="hidden", text_overflow="ellipsis", min_width="0"),
+        rx.spacer(),
+        rx.badge(note, color_scheme=color, variant="soft", radius="full", size="1", flex_shrink="0")
+        if color
+        else rx.text(note, size="1", color_scheme="gray", flex_shrink="0"),
+        spacing="2",
+        align="center",
+        width="100%",
+        padding_left=f"{depth * 1.1}em",
+        padding_y="0.3em",
+        border_left="2px solid var(--gray-5)" if depth else "none",
+        margin_left="0.4em" if depth else "0",
+    )
+
+
+def _tree_card(label: str, rows: list[tuple[int, str, str, str]]) -> rx.Component:
+    return rx.vstack(
+        rx.text(label, size="1", weight="medium", color_scheme="gray"),
+        rx.vstack(*[_tree_row(*row) for row in rows], spacing="0", width="100%"),
+        spacing="2",
+        align="start",
+        padding="1em 1.1em",
+        border=BORDER,
+        border_radius="14px",
+        background=SURFACE,
+        width="100%",
+        min_width="0",
+    )
+
+
+def inside_the_index() -> rx.Component:
+    return _section(
+        _heading(
+            "Inside the index",
+            "How a document becomes a map",
+            "Before any question is asked, each document is turned into a tree of sections the agent can walk. "
+            "Most of it is plain rules, not AI, so a good outline costs nothing to build.",
+        ),
+        rx.grid(
+            # Finding the outline.
+            rx.vstack(
+                rx.text("1. Find the outline", size="4", weight="bold"),
+                rx.text("Cheapest first; the first believable one wins.", size="2", color_scheme="gray"),
+                rx.vstack(
+                    *[_outline_source(i + 1, title, text, i == len(OUTLINE_SOURCES) - 1) for i, (title, text) in enumerate(OUTLINE_SOURCES)],
+                    spacing="0",
+                    width="100%",
+                    margin_top="0.75em",
+                ),
+                spacing="1",
+                align="start",
+                width="100%",
+            ),
+            # Shaping the tree.
+            rx.vstack(
+                rx.text("2. Shape the tree", size="4", weight="bold"),
+                rx.text(
+                    "Every level costs the agent one step, so the tree stays shallow, and the outline changes only where a section breaks a limit.",
+                    size="2",
+                    color_scheme="gray",
+                ),
+                rx.grid(
+                    _tree_card("The document's outline", TREE_BEFORE),
+                    _tree_card("What the agent walks", TREE_AFTER),
+                    columns=rx.breakpoints(initial="1", sm="2"),
+                    spacing="3",
+                    width="100%",
+                    margin_top="0.75em",
+                ),
+                rx.vstack(
+                    *[
+                        rx.hstack(
+                            rx.box(width="10px", height="10px", border_radius="50%", background=f"var(--{color}-9)", flex_shrink="0", margin_top="0.4em"),
+                            rx.text(rx.text.strong(title, ". "), text, size="2", color_scheme="gray"),
+                            spacing="2",
+                            align="start",
+                        )
+                        for color, title, text in TREE_RULES
+                    ],
+                    spacing="2",
+                    margin_top="0.75em",
+                ),
+                spacing="1",
+                align="start",
+                width="100%",
+                min_width="0",
+            ),
+            columns=rx.breakpoints(initial="1", md="5fr 7fr"),
+            spacing="7",
+            width="100%",
+        ),
+        # What every section carries.
+        rx.text("3. Describe every section", size="4", weight="bold", margin_top="2.5em"),
+        rx.grid(
+            *[
+                rx.hstack(
+                    rx.center(rx.icon(icon, size=18), min_width="36px", height="36px", border_radius="10px", background="var(--gray-3)"),
+                    rx.vstack(rx.text(title, size="3", weight="bold"), rx.text(text, size="2", color_scheme="gray"), spacing="1", align="start"),
+                    spacing="3",
+                    align="start",
+                )
+                for icon, title, text in SECTION_PARTS
+            ],
+            columns=rx.breakpoints(initial="1", md="3"),
+            spacing="6",
+            width="100%",
+            margin_top="1em",
+        ),
+        rx.text(
+            "The shaping rules can be changed or turned off in the app's advanced options before indexing, with the cost shown first.",
+            size="2",
+            color_scheme="gray",
+            margin_top="2em",
+        ),
+        id="indexing",
     )
 
 
@@ -292,6 +480,9 @@ def comparison() -> rx.Component:
             color_scheme="gray",
             margin_top="1em",
         ),
+        background="var(--gray-2)",
+        border_top=BORDER,
+        border_bottom=BORDER,
     )
 
 
@@ -332,9 +523,6 @@ def features() -> rx.Component:
             size="2",
             margin_top="2.5em",
         ),
-        background="var(--gray-2)",
-        border_top=BORDER,
-        border_bottom=BORDER,
     )
 
 
@@ -383,6 +571,7 @@ def home() -> rx.Component:
         nav_bar(),
         hero(),
         how_it_works(),
+        inside_the_index(),
         comparison(),
         features(),
         closing(),

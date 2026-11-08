@@ -180,6 +180,7 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
         def home_page() -> None:
             expect(page.get_by_role("heading", name="Retrieval without vectors")).to_be_visible(timeout=30000)
             expect(page.get_by_text("How it works").first).to_be_visible()
+            expect(page.get_by_role("heading", name="How a document becomes a map")).to_have_count(1)  # the indexing explainer
             expect(page.get_by_placeholder("Add your API key to chat")).to_have_count(0)  # the app is not on this page
             width = page.evaluate("document.documentElement.scrollWidth")
             assert width <= 1280, f"the home page scrolls sideways: {width}px wide"
