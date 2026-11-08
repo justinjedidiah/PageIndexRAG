@@ -244,6 +244,29 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
 
         step("the Free preset indexes a heading-less docx without a key", free_without_key, "02b-free.png")
 
+        # Library order: the 3 samples by title (home solar, meridian, nimbus), then the visitor's own documents.
+        switches = page.get_by_role("switch")
+
+        def samples_off_after_first_index() -> None:
+            expect(switches).to_have_count(4, timeout=10000)
+            for i in range(3):
+                expect(switches.nth(i)).to_have_attribute("aria-checked", "false", timeout=10000)
+            expect(switches.nth(3)).to_have_attribute("aria-checked", "true")  # Heron Notes, just indexed
+            expect(page.get_by_text("sample documents are turned off").first).to_be_visible(timeout=10000)
+            # With every sample off, the sample questions have nothing to be answered from: not offered.
+            expect(page.get_by_role("button", name="Who is the commander")).to_have_count(0)
+            switches.nth(1).click()  # Meridian Station back on
+            expect(switches.nth(1)).to_have_attribute("aria-checked", "true", timeout=5000)
+            expect(page.get_by_role("button", name="Who is the commander")).to_be_visible(timeout=5000)
+            # Only that sample's questions come back.
+            expect(page.get_by_role("button", name="What was Nimbus Robotics")).to_have_count(0)
+            # Each switch also looks the way it is: it is styled from data-state, which a wrapper (a tooltip, say)
+            # can overwrite while aria-checked stays right.
+            looks = page.evaluate("() => [...document.querySelectorAll('[role=switch]')].map(s => [s.getAttribute('aria-checked'), s.getAttribute('data-state')])")
+            assert all(state == ("checked" if aria == "true" else "unchecked") for aria, state in looks), f"switch looks wrong: {looks}"
+
+        step("the first indexed document turns the samples off; one can be turned back on", samples_off_after_first_index, "02c-samples-off.png")
+
         def session_countdown() -> None:
             # Before the first upload there was no session; now the header counts down to its end, in the browser.
             countdown = page.locator("#session-countdown")
@@ -308,6 +331,15 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
 
         step("a PDF with bookmarks is indexed, its sections cited by page and shown as pages", pdf_with_bookmarks, "02d-pdf.png")
         step("the PDF's section closes", dismiss_dialog)
+
+        def samples_stay_as_chosen() -> None:
+            expect(switches).to_have_count(5, timeout=10000)
+            expect(switches.nth(1)).to_have_attribute("aria-checked", "true")  # turned back on: a later upload leaves it on
+            expect(switches.nth(0)).to_have_attribute("aria-checked", "false")
+            expect(switches.nth(2)).to_have_attribute("aria-checked", "false")
+            expect(switches.nth(4)).to_have_attribute("aria-checked", "true")  # Solar Brochure, the new upload
+
+        step("a later upload leaves the samples as the visitor set them", samples_stay_as_chosen)
 
         def pdf_refusals() -> None:
             locked = work / "Locked.pdf"
@@ -613,6 +645,10 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
             assert not leftovers, f"session folder left behind: {leftovers}"
             expect(page.get_by_text("Long Report")).to_have_count(0)
             expect(page.get_by_text("Indexing failed")).to_have_count(0)
+            # A fresh start: only the samples are left, all of them on again.
+            expect(switches).to_have_count(3, timeout=10000)
+            for i in range(3):
+                expect(switches.nth(i)).to_have_attribute("aria-checked", "true")
 
         step("ending the session mid-indexing stops it and deletes everything", end_session_while_indexing, "10-ended.png")
 

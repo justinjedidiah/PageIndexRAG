@@ -10,11 +10,13 @@ from .runtime import settings
 from .state import MAX_LEAF_CHOICES, MIN_LEAF_CHOICES, UPLOAD_ID, State
 from .viewmodels import ChatMessage, CitationView, DocView, ImageView, OutlineRowView, PageView, PresetView, StepView
 
+# Each sample question, with the sample it is about (its doc id without the content hash). A question is only
+# offered while that sample is turned on.
 EXAMPLES = [
-    "Who is the commander of Meridian Station, and what shift do they work?",
-    "What was Nimbus Robotics' total revenue in Q3 2026?",
-    "Show me the oxygen reserve chart from the station handbook.",
-    "How often should I clean my solar panels?",
+    ("Who is the commander of Meridian Station, and what shift do they work?", "meridian-station-operations-handbook"),
+    ("What was Nimbus Robotics' total revenue in Q3 2026?", "nimbus-robotics-q3-2026-report"),
+    ("Show me the oxygen reserve chart from the station handbook.", "meridian-station-operations-handbook"),
+    ("How often should I clean my solar panels?", "home-solar-installation-guide"),
 ]
 ACCEPTED = {
     "application/pdf": [".pdf"],
@@ -150,6 +152,23 @@ def key_card() -> rx.Component:
 
 def doc_row(doc: DocView) -> rx.Component:
     return rx.hstack(
+        rx.tooltip(
+            # The tooltip wraps a span, not the switch: it would stamp its own data-state ("closed") on the
+            # switch, which overwrites "checked" / "unchecked", and the switch is styled from that attribute.
+            rx.el.span(
+                rx.switch(
+                    checked=doc.enabled,
+                    on_change=lambda _checked: State.toggle_doc(doc.doc_id),
+                    size="1",
+                    color_scheme="grass",
+                    cursor="pointer",
+                    aria_label=rx.cond(doc.enabled, "Turn off: leave this document out of answers", "Turn on: use this document in answers"),
+                    class_name="doc-switch",
+                ),
+                display="inline-flex",
+            ),
+            content=rx.cond(doc.enabled, "Used in answers. Click to turn off.", "Left out of answers. Click to turn on."),
+        ),
         rx.vstack(
             # One line: a long name ends in "..." and shows in full on hover.
             rx.text(
@@ -174,6 +193,7 @@ def doc_row(doc: DocView) -> rx.Component:
             align="start",
             flex="1",
             min_width="0",  # lets the title shrink and truncate instead of pushing the buttons out
+            opacity=rx.cond(doc.enabled, "1", "0.5"),  # turned off: dimmed, still browsable
         ),
         rx.button("Browse", size="1", variant="soft", color_scheme="gray", on_click=State.open_browse(doc.doc_id)),
         rx.cond(
@@ -203,6 +223,10 @@ def library_card() -> rx.Component:
                 State.docs.length() > 0,
                 rx.vstack(rx.foreach(State.docs, doc_row), spacing="0", width="100%"),
                 rx.text("No documents yet.", **MUTED),
+            ),
+            rx.cond(
+                State.docs.length() > 0,
+                rx.text("Switch a document off to leave it out of answers. You can still browse it.", **MUTED),
             ),
             spacing="2",
             align="start",
@@ -631,10 +655,13 @@ def empty_chat() -> rx.Component:
             size="3",
         ),
         rx.cond(
-            State.has_samples,
+            State.samples_enabled,  # with every sample off, these questions have nothing to be answered from
             rx.vstack(
                 rx.text("Try one on the sample documents", **LABEL),
-                *[example_card(question, first=i == 0) for i, question in enumerate(EXAMPLES)],
+                *[
+                    rx.cond(State.enabled_sample_names.contains(sample), example_card(question, first=i == 0))
+                    for i, (question, sample) in enumerate(EXAMPLES)
+                ],
                 spacing="2",
                 align="start",
                 width="100%",

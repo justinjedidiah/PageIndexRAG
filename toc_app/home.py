@@ -100,7 +100,7 @@ def demo_answer() -> rx.Component:
     return rx.box(
         rx.vstack(
             rx.box(
-                rx.text(EXAMPLES[0], size="2"),
+                rx.text(EXAMPLES[0][0], size="2"),
                 align_self="flex-end",
                 background="var(--gray-4)",
                 padding="0.55em 0.95em",

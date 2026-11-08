@@ -208,6 +208,11 @@ class State(rx.State):
 
     docs: list[DocView] = []
     has_samples: bool = False
+    # Documents the visitor turned off: left out of answers, still listed and browsable. Samples and uploads alike.
+    disabled_docs: list[str] = []
+    # The samples are turned off once, when the visitor's first own document is indexed, so answers come from
+    # it. Only that once: a sample turned back on stays on through later uploads.
+    _samples_turned_off: bool = False
     # When this visitor's uploads are deleted (seconds since 1970), or 0 before the first upload.
     # The page counts down to it in the browser; the server only sends the time once.
     session_expires_at: float = 0
@@ -278,7 +283,22 @@ class State(rx.State):
 
     @rx.var
     def can_chat(self) -> bool:
-        return self.key_set and self.agent_model != "" and bool(self.docs) and not self.thinking
+        return self.key_set and self.agent_model != "" and self.enabled_doc_count > 0 and not self.thinking
+
+    @rx.var
+    def enabled_doc_count(self) -> int:
+        return sum(1 for doc in self.docs if doc.enabled)
+
+    @rx.var
+    def samples_enabled(self) -> bool:
+        """Whether any sample is on (the sample questions are only offered then)."""
+        return any(doc.sample and doc.enabled for doc in self.docs)
+
+    @rx.var
+    def enabled_sample_names(self) -> list[str]:
+        """The samples turned on, by doc id without its content hash ("meridian-station-operations-handbook"),
+        so each sample question is offered only while its document is on."""
+        return [doc.doc_id.rsplit("-", 1)[0] for doc in self.docs if doc.sample and doc.enabled]
 
     @rx.var
     def chat_hint(self) -> str:
@@ -287,6 +307,8 @@ class State(rx.State):
             return "Add your API key to start chatting. Without one you can still browse the library."
         if not self.agent_model:
             return "Choose a model for chat (under your API key) to start chatting."
+        if self.docs and self.enabled_doc_count == 0:
+            return "Every document is turned off. Turn one on in the library to ask about it."
         return ""
 
     @rx.var
@@ -350,7 +372,10 @@ class State(rx.State):
 
     def _refresh(self) -> None:
         docs = self._library().documents()
-        self.docs = [DocView(d.doc_id, d.title, d.kind, d.summary, d.sample) for d in docs]
+        present = {d.doc_id for d in docs}
+        self.disabled_docs = [doc_id for doc_id in self.disabled_docs if doc_id in present]  # deleted or expired: forget
+        off = set(self.disabled_docs)
+        self.docs = [DocView(d.doc_id, d.title, d.kind, d.summary, d.sample, d.doc_id not in off) for d in docs]
         self.has_samples = any(d.sample for d in docs)
         session = sessions.get(self._token())
         self.session_expires_at = session.expires_at if session else 0
@@ -516,6 +541,8 @@ class State(rx.State):
                 sessions.delete(token)
         self._forget_key()
         self.key_error = ""
+        self.disabled_docs = []  # a fresh start: every sample on, and turned off again by the next first upload
+        self._samples_turned_off = False
         self.messages = []
         self.thinking = False
         self.live_steps = []
@@ -826,8 +853,31 @@ class State(rx.State):
                 forget_saved_read(source)  # indexed: options can no longer change, so the saved read is done with
                 self._clear_pending(delete_files=False)
             self._refresh()
+            samples_off = False
+            if not error:
+                # Just indexed: it is on, even if an earlier version of it had been turned off.
+                self.disabled_docs = [d for d in self.disabled_docs if d != index.doc_id]
+                if not self._samples_turned_off:  # the visitor's first own document: answers should come from it
+                    self._samples_turned_off = True
+                    samples = [doc.doc_id for doc in self.docs if doc.sample]
+                    self.disabled_docs = [*self.disabled_docs, *(s for s in samples if s not in self.disabled_docs)]
+                    samples_off = bool(samples)
+                self._refresh()
         if not error:
-            yield rx.toast.success(f"Indexed {index.title}. You can ask about it now.")
+            note = " The sample documents are turned off; turn them back on in the library." if samples_off else ""
+            yield rx.toast.success(f"Indexed {index.title}. You can ask about it now.{note}")
+
+    @rx.event
+    def toggle_doc(self, doc_id: str):
+        """Turn a document on or off for answers."""
+        if doc_id not in {doc.doc_id for doc in self.docs}:
+            return
+        if doc_id in self.disabled_docs:
+            self.disabled_docs = [d for d in self.disabled_docs if d != doc_id]
+        else:
+            self.disabled_docs = [*self.disabled_docs, doc_id]
+        off = set(self.disabled_docs)
+        self.docs = [dataclasses.replace(doc, enabled=doc.doc_id not in off) for doc in self.docs]
 
     @rx.event
     def delete_doc(self, doc_id: str):
@@ -918,6 +968,7 @@ class State(rx.State):
             if self.thinking or not self.key_set or not self.agent_model:
                 return
             llm, token = self._llm(), self._token()
+            turned_off = set(self.disabled_docs)
             chat_settings = dataclasses.replace(settings, agent_listing_depth=int(self.listing_depth))
             history = [
                 ChatTurn(role=m.role, content=m.text)
@@ -934,7 +985,7 @@ class State(rx.State):
         steps: list[StepView] = []  # this answer's steps, kept here too so the final message can carry them
         try:
             library = Library.for_session(settings, sessions, token)
-            indexes = library.indexes()
+            indexes = [index for index in library.indexes() if index.doc_id not in turned_off]
             if not indexes:
                 raise EmptyLibrary
             events = stream_ask(indexes, question, chat_settings, history, llm_config=llm)
@@ -965,7 +1016,12 @@ class State(rx.State):
             async with self:
                 self._finish_answer(
                     generation,
-                    ChatMessage(role="assistant", text="There are no documents to search yet.", found=False, error=True),
+                    ChatMessage(
+                        role="assistant",
+                        text="There are no documents to search: every document is turned off, or none is indexed yet.",
+                        found=False,
+                        error=True,
+                    ),
                 )
         except Exception as exc:
             log.warning("Answering failed: %s", type(exc).__name__)  # the type only: the text could hold request details

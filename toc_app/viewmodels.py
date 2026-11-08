@@ -10,6 +10,7 @@ class DocView:
     kind: str
     summary: str
     sample: bool
+    enabled: bool = True  # turned off: still listed and browsable, but left out of answers
 
 
 @dataclasses.dataclass
