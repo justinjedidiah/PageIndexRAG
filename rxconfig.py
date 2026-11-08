@@ -66,6 +66,9 @@ config = rx.Config(
         )
     ],
     disable_plugins=[rx.plugins.SitemapPlugin],
+    # No floating "Built with Reflex" button on every page (production builds only). Reflex is credited in the
+    # home page footer and the README instead.
+    show_built_with_reflex=False,
     # Visitor state (their API key included) stays in memory. Reflex's default pickles it to .states/ on disk,
     # and it switches to Redis by itself when REDIS_URL is set: naming the mode here rules out both.
     state_manager_mode=rx.constants.StateManagerMode.MEMORY,
