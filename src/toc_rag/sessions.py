@@ -53,6 +53,17 @@ def describe_duration(seconds: float) -> str:
     return " ".join(parts) or "under a minute"
 
 
+NEW_FOLDER_GRACE_SECONDS = 60
+
+
+def _recently_changed(directory: Path) -> bool:
+    """Real time on purpose (not the manager's clock): this is about the file system, not session lifetimes."""
+    try:
+        return time.time() - directory.stat().st_mtime < NEW_FOLDER_GRACE_SECONDS
+    except OSError:
+        return False
+
+
 class SessionManager:
     def __init__(self, root: Path | str, ttl_seconds: int, clock: Callable[[], float] = time.time):
         self.root = Path(root)
@@ -119,6 +130,8 @@ class SessionManager:
             if not directory.is_dir():
                 continue
             created = self._created(directory)
+            if created is None and _recently_changed(directory):
+                continue  # being created right now (`ensure` makes the folder, then writes its marker): not junk
             if created is None or now - created >= self.ttl:
                 shutil.rmtree(directory, ignore_errors=True)
                 removed += 1

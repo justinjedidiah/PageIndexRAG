@@ -141,28 +141,25 @@ class LibraryNavigator:
         return f'Opened "{index.title}".\n\n' + self.docs[doc_id].list_children("root")
 
     def list_children(self, node_id: str) -> str:
-        nav = self._open()
+        nav, node_id = self._target(node_id)
         if nav is None:
             return NO_DOCUMENT
-        node_id = self._local(nav, node_id)
         result = nav.list_children(node_id)
         self._record("list_children", nav, node_id, "Looked inside")
         return result
 
     def read_node(self, node_id: str) -> str:
-        nav = self._open()
+        nav, node_id = self._target(node_id)
         if nav is None:
             return NO_DOCUMENT
-        node_id = self._local(nav, node_id)
         result = nav.read_node(node_id)
         self._record("read_node", nav, node_id, "Read")
         return result
 
     def go_up(self, node_id: str) -> str:
-        nav = self._open()
+        nav, node_id = self._target(node_id)
         if nav is None:
             return NO_DOCUMENT
-        node_id = self._local(nav, node_id)
         result = nav.go_up(node_id)
         if result == AT_TOP:
             return f"{AT_TOP} Use list_documents and open_document to switch documents."
@@ -193,8 +190,21 @@ class LibraryNavigator:
         doc_id, sep, local = ref.partition(":")
         return (doc_id, local) if sep else (self.current, ref)
 
-    def _local(self, nav: Navigator, node_id: str) -> str:
-        return node_id.removeprefix(nav.prefix)
+    def _target(self, node_id: str) -> tuple[Navigator | None, str]:
+        """The document and local id a section tool acts on.
+
+        A qualified id ("doc_id:1.2", as read_node shows them) names its own document: if that is not the
+        open one, it is opened first (and shown in the path). Without this, going back to a section read in
+        another document failed as an unknown id. An id that names no section stays with the open document.
+        """
+        doc_id, sep, local = node_id.partition(":")
+        target = self.docs.get(doc_id) if sep else None
+        if target is not None and local in target.nodes:
+            if doc_id != self.current:
+                self.current = doc_id
+                self.trace.append(Step(tool="open_document", doc_id=doc_id, label=f'Opened "{target.index.title}"'))
+            return target, local
+        return self._open(), node_id
 
     def _record(self, tool: str, nav: Navigator, node_id: str, verb: str) -> None:
         node = nav.nodes.get(node_id)

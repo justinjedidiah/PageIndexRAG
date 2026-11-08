@@ -10,9 +10,10 @@ import logging
 import re
 
 _PATTERNS = [
-    # Provider keys: Anthropic (sk-ant-...), OpenAI (sk-..., sk-proj-...), Google (AIza...).
-    (re.compile(r"sk-[A-Za-z0-9_-]{16,}"), "sk-***"),
-    (re.compile(r"AIza[0-9A-Za-z_-]{20,}"), "AIza***"),
+    # Provider keys: Anthropic (sk-ant-...), OpenAI (sk-..., sk-proj-...), Google (AIza...). Only as a word of
+    # their own (\b): "risk-assessment-report-3fa9c1d2" or "task-list" are document ids, not keys.
+    (re.compile(r"\bsk-[A-Za-z0-9_-]{16,}"), "sk-***"),
+    (re.compile(r"\bAIza[0-9A-Za-z_-]{20,}"), "AIza***"),
     # Reflex's client token in a URL query or a header.
     (re.compile(r"(\btoken=)[^&\s\"']+", re.IGNORECASE), r"\1***"),
     (re.compile(r"(reflex-client-token['\"]?\s*[:,]\s*['\"]?)[^\s'\",}]+", re.IGNORECASE), r"\1***"),

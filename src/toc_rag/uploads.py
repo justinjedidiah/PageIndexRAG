@@ -7,6 +7,7 @@ unpack to something huge (a zip bomb).
 
 import io
 import re
+import unicodedata
 import zipfile
 from pathlib import PurePath
 
@@ -22,11 +23,23 @@ class UploadError(ValueError):
     """The message is safe to show to the visitor."""
 
 
+MAX_NAME = 100
+
+
 def safe_filename(name: str) -> str:
-    """Keep only the base name, with odd characters replaced, so it is safe to store and show."""
-    base = PurePath(name.replace("\\", "/")).name
-    base = re.sub(r"[^A-Za-z0-9._ -]", "_", base).strip(" .")
-    return base[:100] or "upload"
+    """Keep only the base name, with odd characters replaced, so it is safe to store and show.
+
+    Letters and digits of any script stay (the name becomes the document's title, so "Relatório" must not
+    turn into "Relat_rio"), as do brackets, commas and apostrophes. A long name is shortened before its
+    extension, never through it: the extension is how the file's type is checked.
+    """
+    base = PurePath(unicodedata.normalize("NFC", name).replace("\\", "/")).name  # NFC: "ó" as one letter, not o + accent
+    base = re.sub(r"\s+", " ", base)  # tabs and line breaks become plain spaces
+    base = re.sub(r"[^\w.(),' -]", "_", base).strip(" .")  # \w: letters and digits in any script, and "_"
+    path = PurePath(base or "upload")
+    suffix = path.suffix if 1 < len(path.suffix) <= 10 else ""
+    stem = (path.stem if suffix else path.name)[: MAX_NAME - len(suffix)].rstrip(" .")
+    return (stem or "upload") + suffix
 
 
 def validate_upload(

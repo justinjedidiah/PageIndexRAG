@@ -75,11 +75,27 @@ def test_rejects_a_zip_bomb():
     [
         ("report.docx", "report.docx"),
         ("../../etc/passwd", "passwd"),
-        ("C:\\Users\\me\\My File (1).docx", "My File _1_.docx"),
+        ("C:\\Users\\me\\My File (1).docx", "My File (1).docx"),
         ("<script>.docx", "_script_.docx"),
         ("...", "upload"),
-        ("a" * 300 + ".docx", ("a" * 300 + ".docx")[:100]),
+        # Bug: a long name was cut through its extension, so a real .docx was refused as "not .pdf or .docx".
+        ("a" * 300 + ".docx", "a" * 95 + ".docx"),
+        # Bug: names in other languages lost their letters, and the name is the document's title.
+        ("Relatório anual 2025.pdf", "Relatório anual 2025.pdf"),
+        ("年度报告.docx", "年度报告.docx"),
+        ("Relato\u0301rio.pdf", "Relatório.pdf"),  # macOS sends "ó" as o + accent: joined into one letter
+        ("Q3 report, John's notes.pdf", "Q3 report, John's notes.pdf"),
+        ("a/b:c*d?.pdf", "b_c_d_.pdf"),  # still no path or Windows-reserved characters
+        ("tabs\tand\nnewlines.pdf", "tabs and newlines.pdf"),
+        ("\u202egpj.pdf", "_gpj.pdf"),  # an invisible right-to-left override cannot disguise the name
+        ("   .pdf", "pdf"),
     ],
 )
 def test_safe_filename(raw, expected):
     assert safe_filename(raw) == expected
+
+
+def test_a_long_name_keeps_its_extension_and_is_accepted():
+    name = safe_filename("Annual report of the regional water authority " * 5 + ".docx")
+    assert len(name) <= 100 and name.endswith(".docx")
+    assert validate_upload(name, real_docx(), MAX) == "docx"

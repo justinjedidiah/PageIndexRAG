@@ -230,9 +230,10 @@ def stream_agent(
         stream_mode=["updates", "custom"],
     )
     emitted, result, last_draft, note = 0, None, "", ""
+    library = set(navigator.indexes)  # only brackets naming these documents are source markers
     for mode, update in updates:
         if mode == "custom":
-            if (draft := visible_prefix(update["text"])) and draft != last_draft:
+            if (draft := visible_prefix(update["text"], library)) and draft != last_draft:
                 last_draft = draft
                 yield Draft(text=draft)
             continue
@@ -240,7 +241,7 @@ def stream_agent(
         for node_name, changes in update.items():
             if node_name == "agent":
                 reply = changes["messages"][-1]
-                note = extract_markers(_message_text(reply))[0] if reply.tool_calls else ""
+                note = extract_markers(_message_text(reply), library)[0] if reply.tool_calls else ""
             if node_name == "tools":
                 for i, step in enumerate(navigator.trace[emitted:]):
                     yield step.model_copy(update={"note": note}) if i == 0 else step  # the note goes with the first
@@ -297,7 +298,7 @@ def _history_messages(history: list[ChatTurn]) -> list[AnyMessage]:
 
 def _answer_result(navigator: LibraryNavigator, reply: str) -> AnswerResult:
     """Turn the model's final reply into an answer. Only sections and images it actually read can be cited."""
-    text, section_refs, image_refs = extract_markers(reply)
+    text, section_refs, image_refs = extract_markers(reply, navigator.indexes)
     citations = []
     for ref in section_refs:
         if found := navigator.find_node(ref):

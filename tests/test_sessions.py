@@ -1,3 +1,6 @@
+import os
+import time
+
 import pytest
 
 from toc_rag.sessions import SessionManager
@@ -47,7 +50,9 @@ def test_sweep_removes_only_expired_sessions(tmp_path):
     sessions.ensure("old-session-1")
     clock.now += 60
     sessions.ensure("new-session-1")
-    (tmp_path / "no-marker-dir").mkdir()  # unknown folders count as expired
+    junk = tmp_path / "no-marker-dir"
+    junk.mkdir()  # unknown folders count as expired, once they are not brand new
+    os.utime(junk, (time.time() - 3600, time.time() - 3600))
     (tmp_path / "stray.txt").write_text("not a session")
 
     clock.now += 50  # old: 110s old, new: 50s old
@@ -89,3 +94,12 @@ def test_session_id_hides_the_client_token():
     assert token not in session_id and _TOKEN.match(session_id)
     assert session_id != session_id_for(token + "x")
     assert session_id_for("") == ""
+
+
+def test_sweep_spares_a_session_folder_being_created(tmp_path):
+    # Bug: `ensure` makes the folder, then writes its marker. A sweep in between saw a folder without a
+    # marker, deleted it as junk, and the visitor's upload failed.
+    sessions = SessionManager(tmp_path, ttl_seconds=100)
+    (tmp_path / "visitor-being-created").mkdir()
+    assert sessions.sweep() == 0
+    assert (tmp_path / "visitor-being-created").exists()

@@ -611,11 +611,20 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
             expect(page.locator("#replace-note")).to_contain_text("A different version of Pelican Care Guide.docx", timeout=30000)
             page.locator("[data-preset=free]").click()
             page.get_by_role("button", name="Index it").click()
-            expect(page.get_by_text("Indexed Pelican Care Guide").first).to_be_visible(timeout=60000)
+            # Waited for on disk, not by the "Indexed Pelican Care Guide" toast (the one from the step before can
+            # still be showing) nor by "Indexing..." being absent (it is, too, just before indexing starts).
+            # Done when only the new version's file is left, in its own folder.
+            def uploads() -> list[tuple[str, int, bool, bool]]:
+                return [
+                    (f.parent.name, f.stat().st_size, f.read_bytes() == edited.read_bytes(), f.read_bytes() == pelican.read_bytes())
+                    for f in (data / "sessions").glob("*/uploads/*/Pelican Care Guide.docx")
+                ]
+
+            deadline = time.monotonic() + 30
+            while not ((left := uploads()) and len(left) == 1 and left[0][2]) and time.monotonic() < deadline:
+                time.sleep(0.25)
+            assert len(left) == 1 and left[0][2], f"uploads left (folder, size, is edited, is original): {left}"
             expect(page.get_by_text("Pelican Care Guide", exact=True)).to_have_count(1)  # replaced, not a second entry
-            # On disk, only the new version's file is left, in its own folder.
-            files = list((data / "sessions").glob("*/uploads/*/Pelican Care Guide.docx"))
-            assert len(files) == 1 and files[0].read_bytes() == edited.read_bytes(), f"uploads left: {files}"
 
         step("an edited file with the same name replaces the old version", edited_version_replaces)
 
@@ -645,6 +654,23 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
             expect(page.get_by_text("sample", exact=True)).to_have_count(3)
 
         step("deleting your documents removes them", delete_mine)
+
+        def expired_upload_is_cleared() -> None:
+            # Bug: with the page left open past the session's end, the sweep deletes the waiting upload; "Index it"
+            # then failed with an error and the upload card stayed stuck.
+            waiting = work / "Expired Upload.docx"
+            make_plain_docx(waiting)
+            page.set_input_files("input[type=file]", str(waiting))
+            expect(page.locator("[data-preset=free]")).to_be_visible(timeout=30000)
+            for folder in (data / "sessions").iterdir():  # what the 2-hour sweep does
+                shutil.rmtree(folder)
+            page.locator("[data-preset=free]").click()
+            page.get_by_role("button", name="Index it").click()
+            expect(page.get_by_text("deleted when your session expired")).to_be_visible(timeout=15000)
+            expect(page.get_by_role("button", name="Index it")).to_have_count(0)  # back to the drop zone
+            expect(page.get_by_text("Expired Upload")).to_have_count(0)
+
+        step("an upload left waiting past the session's end is cleared, not stuck", expired_upload_is_cleared)
 
         def end_session_while_indexing() -> None:
             long_doc = work / "Long Report.docx"

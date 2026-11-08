@@ -479,6 +479,17 @@ class State(rx.State):
             describe_images=self.opt_images,
         )
 
+    def _pending_lost(self) -> bool:
+        """The waiting upload is gone from disk: its session expired (the sweep deleted the folder) while the
+        page stayed open. Then it is cleared and the visitor told, instead of "Index it" failing with an error."""
+        token = self._token()
+        if pending_path(token).is_file() and (sessions.uploads_dir(token) / self._pending_file).is_file():
+            return False
+        self._clear_pending(delete_files=False)
+        self.upload_error = "That upload was deleted when your session expired. Upload it again."
+        self._refresh()
+        return True
+
     def _load_pending(self) -> DocumentIndex:
         return DocumentIndex.model_validate_json(pending_path(self._token()).read_text(encoding="utf-8"))
 
@@ -522,6 +533,8 @@ class State(rx.State):
             return
         if not tree_changed:
             self._show_estimates()  # summary and image options only change the cost, which is cached
+            return
+        if self._pending_lost():
             return
         index = self._load_pending()
         if index.options != self._options():
@@ -807,6 +820,8 @@ class State(rx.State):
     async def confirm_index(self):
         async with self:
             if not self._pending_id or self.indexing or self.rebuilding:
+                return
+            if self._pending_lost():
                 return
             options = self._options()
             if options.uses_llm and not self.key_set:

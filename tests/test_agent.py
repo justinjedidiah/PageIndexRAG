@@ -285,9 +285,45 @@ def test_agent_does_not_retry_a_refusal():
 def test_extract_markers():
     text = "Fact [a:1.2], more [b:3, a:1.2] at [10:30] and a [link](x). [img:a:img-1]\n\n[a:2]"
     clean, sections, images = extract_markers(text)
-    assert sections == ["a:1.2", "b:3", "10:30", "a:2"]  # a time like [10:30] looks like a ref; it is dropped later
+    assert sections == ["a:1.2", "b:3", "a:2"]
     assert images == ["a:img-1"]
-    assert clean == "Fact, more at and a [link](x)."
+    # Bug: a time in brackets has the shape of a ref, and vanished from the answer ("at and a").
+    assert clean == "Fact, more at [10:30] and a [link](x)."
+
+
+def test_times_and_ratios_in_brackets_stay_in_the_answer():
+    text = "Shift A starts [06:00], the mix is [3:1], see [2:30pm] [ships:1.1]."
+    clean, sections, _ = extract_markers(text, {"ships"})
+    assert clean == "Shift A starts [06:00], the mix is [3:1], see [2:30pm]."
+    assert sections == ["ships:1.1"]
+    # A document whose id is only digits still cites: the library says it is a document.
+    clean, sections, _ = extract_markers("Revenue rose [2024:1.2].", {"2024"})
+    assert (clean, sections) == ("Revenue rose.", ["2024:1.2"])
+    # A made-up document id is still taken out of the text: it cites nothing.
+    assert extract_markers("Ada [bogus:9.9].", {"ships"})[0] == "Ada."
+
+
+def test_agent_answer_keeps_a_bracketed_time():
+    model = ScriptedModel(replies=[call("read_node", node_id="1.1"), AIMessage("Ada's watch starts at [08:00]. [ships:1.1]")])
+    result = run_agent(LibraryNavigator([make_ships()]), model, "When does Ada start?", max_steps=5)
+    assert result.text == "Ada's watch starts at [08:00]."
+    assert [c.node_id for c in result.citations] == ["1.1"]
+
+
+def test_a_section_of_another_document_can_be_read_by_its_qualified_id():
+    # Bug: read_node shows qualified ids ([ships:1.1]); after opening another document, going back to one
+    # of them by that id failed as "Unknown node id", costing the agent a step (or the answer).
+    nav = LibraryNavigator([make_ships(), make_cars()])
+    nav.open_document("ships")
+    assert "Ada" in nav.read_node("ships:1.1")
+    nav.open_document("cars")
+    assert "Ada" in nav.read_node("ships:1.1")  # back in the first document, without open_document
+    assert nav.current == "ships"
+    assert [s.label for s in nav.trace][-2:] == ['Opened "Ships"', 'Read "Crew"']  # the switch shows in the path
+    assert nav.has_read("ships", "1.1")
+    # An id naming no section stays with the open document and says so; it does not switch.
+    assert "Unknown node id" in nav.list_children("cars:9.9")
+    assert nav.current == "ships"
 
 
 def test_listing_depth_two_shows_grandchildren_titles_only():

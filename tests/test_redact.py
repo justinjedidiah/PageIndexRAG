@@ -32,3 +32,12 @@ def test_installed_factory_cleans_every_logger(caplog):
     assert "SecretSecret" not in caplog.text
     assert "InTraceback" not in caplog.text
     assert "sk-***" in caplog.text
+
+
+def test_document_ids_containing_sk_are_not_masked():
+    # Bug: "risk-", "task-", "desk-" contain "sk-", so document ids were masked as if they were keys.
+    text = "Indexed risk-assessment-report-3fa9c1d2, task-management-handbook-0011aa22 and desk-booking-guide-99aa88bb"
+    assert redact.redact(text) == text
+    # Keys still are, wherever they stand on their own.
+    for line in ("key='sk-ant-api03-AbCdEfGhIjKlMnOp'", "Bearer sk-proj-AbCdEfGhIjKlMnOpQr", "x-api-key: sk-AbCdEfGhIjKlMnOpQrSt"):
+        assert "AbCdEfGh" not in redact.redact(line)
