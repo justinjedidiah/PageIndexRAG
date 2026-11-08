@@ -76,6 +76,8 @@ import io  # noqa: E402
 
 from PIL import Image as PILImage  # noqa: E402
 
+from toc_rag.indexing.pipeline import make_doc_id  # noqa: E402
+
 from .test_pdf import BODY, make_pdf  # noqa: E402
 
 TOKEN = "token-12345"
@@ -84,10 +86,11 @@ TOKEN = "token-12345"
 def pdf_session(tmp_path, settings, name="guide.pdf", pages=3):
     sessions = SessionManager(tmp_path / "sessions", ttl_seconds=100)
     sessions.ensure(TOKEN)
-    uploads = sessions.uploads_dir(TOKEN)
-    uploads.mkdir()
-    path = make_pdf(uploads / name, [[("h", f"Part {n}"), ("p", BODY * 3)] for n in range(pages)],
-                    labels=[(0, "ROMAN_LOWER", 1)])
+    drafted = make_pdf(tmp_path / name, [[("h", f"Part {n}"), ("p", BODY * 3)] for n in range(pages)],
+                       labels=[(0, "ROMAN_LOWER", 1)])
+    folder = sessions.upload_dir(TOKEN, make_doc_id(drafted))  # as the app keeps it: in the document's own folder
+    folder.mkdir(parents=True)
+    path = drafted.replace(folder / name)
     index = index_document(path, sessions.store(TOKEN), settings, use_llm=False)
     return sessions, index, path
 

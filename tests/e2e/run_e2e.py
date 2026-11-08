@@ -600,6 +600,25 @@ def run_browser(out: Path, data: Path, work: Path) -> None:
 
         step("indexing it again replaces the old version", reindex_with_budget)
 
+        def edited_version_replaces() -> None:
+            # Another version of the file: the same name, other content (so another document id).
+            edited = work / "edited" / "Pelican Care Guide.docx"
+            edited.parent.mkdir(exist_ok=True)
+            doc = Document(str(pelican))
+            doc.add_paragraph("Pelicans sleep standing on one leg near the water.")
+            doc.save(str(edited))
+            page.set_input_files("input[type=file]", str(edited))
+            expect(page.locator("#replace-note")).to_contain_text("A different version of Pelican Care Guide.docx", timeout=30000)
+            page.locator("[data-preset=free]").click()
+            page.get_by_role("button", name="Index it").click()
+            expect(page.get_by_text("Indexed Pelican Care Guide").first).to_be_visible(timeout=60000)
+            expect(page.get_by_text("Pelican Care Guide", exact=True)).to_have_count(1)  # replaced, not a second entry
+            # On disk, only the new version's file is left, in its own folder.
+            files = list((data / "sessions").glob("*/uploads/*/Pelican Care Guide.docx"))
+            assert len(files) == 1 and files[0].read_bytes() == edited.read_bytes(), f"uploads left: {files}"
+
+        step("an edited file with the same name replaces the old version", edited_version_replaces)
+
         def sample_file_is_refused() -> None:
             page.set_input_files("input[type=file]", str(ROOT / "samples" / "source" / "home-solar-installation-guide.docx"))
             expect(page.get_by_text("one of the sample documents")).to_be_visible(timeout=20000)

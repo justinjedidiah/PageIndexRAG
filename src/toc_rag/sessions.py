@@ -70,6 +70,11 @@ class SessionManager:
     def uploads_dir(self, token: str) -> Path:
         return self.session_dir(token) / "uploads"
 
+    def upload_dir(self, token: str, doc_id: str) -> Path:
+        """Where one document's uploaded file lives: a folder per document, so an upload with the same name
+        (another version of the file) never overwrites the file an indexed document was built from."""
+        return self.uploads_dir(token) / doc_id
+
     def get(self, token: str) -> Session | None:
         """The live session for this token, or None if there is none or it has expired."""
         created = self._created(self.session_dir(token))

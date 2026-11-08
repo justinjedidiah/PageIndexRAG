@@ -7,6 +7,7 @@ import asyncio
 import dataclasses
 import itertools
 import logging
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -69,6 +70,22 @@ _jobs: dict[str, IndexingJob] = {}  # session token -> its running job
 _read_slots = asyncio.Semaphore(settings.max_parallel_reads)
 READING = "Reading the document..."
 WAITING = "Waiting for a free slot: other visitors' documents are being read first..."
+
+
+def _older_versions(store, doc_id: str, file_name: str) -> list[str]:
+    """The visitor's other documents uploaded under this file name: earlier versions of it, which indexing
+    this one replaces (the same file again has the same id, so it is not listed)."""
+    return [
+        entry.doc_id
+        for entry in store.list_documents()
+        if entry.doc_id != doc_id and store.has_index(entry.doc_id) and store.load_index(entry.doc_id).source_path == file_name
+    ]
+
+
+def _remove_document(token: str, doc_id: str) -> None:
+    """A document's index, images, rendered pages and uploaded file."""
+    sessions.store(token).delete_document(doc_id)
+    shutil.rmtree(sessions.upload_dir(token, doc_id), ignore_errors=True)
 
 
 async def _read_document(path: Path, store, options: IndexOptions) -> DocumentIndex:
@@ -384,13 +401,11 @@ class State(rx.State):
         if delete_files and self._pending_id:
             token = self._token()
             store = sessions.store(token)
-            # A new upload has image files but no saved index yet: remove its folder. A re-upload of a document
-            # already in the library shares that folder: keep it, so cancelling (or a failed run) leaves the
-            # existing version as it was.
+            # A new upload has image files and its uploaded file but no saved index yet: remove them. The same
+            # file uploaded again shares both with the indexed document: keep them, so cancelling (or a failed
+            # run) leaves the existing version as it was, its pages included.
             if not store.has_index(self._pending_id):
-                store.delete_document(self._pending_id)
-            (sessions.uploads_dir(token) / self._pending_file).unlink(missing_ok=True)
-            forget_saved_read(sessions.uploads_dir(token) / self._pending_file)
+                _remove_document(token, self._pending_id)
             pending_path(token).unlink(missing_ok=True)
         self._pending_id = ""
         self._pending_file = ""
@@ -418,16 +433,16 @@ class State(rx.State):
             if not path.is_file():
                 return
             index = DocumentIndex.model_validate_json(path.read_text(encoding="utf-8"))
-            if not (sessions.uploads_dir(token) / index.source_path).is_file():
+            if not (sessions.upload_dir(token, index.doc_id) / index.source_path).is_file():
                 return
         except Exception:
             log.exception("Could not restore a pending document")
             return
         self._pending_id = index.doc_id
-        self._pending_file = index.source_path
+        self._pending_file = f"{index.doc_id}/{index.source_path}"
         self.has_pending = True
         self.pending_name = index.title
-        self.replace_note = self._replace_note(index.doc_id)
+        self.replace_note = self._replace_note(index.doc_id, index.source_path)
         if index.options:
             options = index.options
             self.opt_split = options.split_large
@@ -439,14 +454,19 @@ class State(rx.State):
             self.opt_images = options.describe_images
         self._cache_estimates(index)
 
-    def _replace_note(self, doc_id: str) -> str:
-        """If this document is already in the visitor's library: how it was indexed, and that indexing replaces it."""
+    def _replace_note(self, doc_id: str, file_name: str) -> str:
+        """If this file is already in the visitor's library, as it is or as another version (the same file name):
+        say so, and that indexing replaces it."""
         token = self._token()
         store = sessions.store(token) if token and sessions.get(token) else None
-        if store is None or not store.has_index(doc_id):
+        if store is None:
             return ""
-        existing = store.load_index(doc_id)
-        return f"Already in your library (indexed with {_indexed_with_text(existing)}). Indexing it again replaces that version."
+        if store.has_index(doc_id):
+            existing = store.load_index(doc_id)
+            return f"Already in your library (indexed with {_indexed_with_text(existing)}). Indexing it again replaces that version."
+        if _older_versions(store, doc_id, file_name):
+            return f"A different version of {file_name} is in your library. Indexing this one replaces it."
+        return ""
 
     def _options(self) -> IndexOptions:
         return IndexOptions(
@@ -631,7 +651,11 @@ class State(rx.State):
         if library.is_sample(doc_id):
             self.upload_error = "That's one of the sample documents, already in the library."
             return
-        replacing = bool(library.session and library.session.has_index(doc_id))
+        # Indexing this replaces a document in the library (the same file again, or another version of it under
+        # the same name), so it does not count as one more.
+        replacing = bool(library.session) and (
+            library.session.has_index(doc_id) or bool(_older_versions(library.session, doc_id, name))
+        )
         if not replacing and self.own_doc_count >= settings.max_session_docs:
             self.upload_error = f"You can keep up to {settings.max_session_docs} documents in a session. Delete one first."
             return
@@ -644,9 +668,15 @@ class State(rx.State):
         self.building_label = WAITING if _read_slots.locked() else READING
         yield
         path: Path | None = None
+
+        def discard_upload() -> None:
+            # Unless it is the very file an indexed document was built from (the same file uploaded again).
+            if not sessions.store(token).has_index(doc_id):
+                _remove_document(token, doc_id)
+
         try:
             sessions.ensure(token)
-            directory = sessions.uploads_dir(token)
+            directory = sessions.upload_dir(token, doc_id)  # its own folder: never overwrites another document's file
             directory.mkdir(parents=True, exist_ok=True)
             path = directory / name
             path.write_bytes(data)
@@ -660,25 +690,23 @@ class State(rx.State):
             log.info("Upload refused: %s", exc)
             self.upload_error = str(exc)
             if path:
-                path.unlink(missing_ok=True)
-                forget_saved_read(path)
+                discard_upload()
             return
         except Exception:
             log.exception("Reading an uploaded document failed")
             self.upload_error = "Could not read that document. It may be damaged or use unsupported features."
             if path:
-                path.unlink(missing_ok=True)
-                forget_saved_read(path)
+                discard_upload()
             return
         finally:
             self.building = False
 
         pending_path(token).write_text(index.model_dump_json(), encoding="utf-8")
         self._pending_id = index.doc_id
-        self._pending_file = name
+        self._pending_file = f"{doc_id}/{name}"
         self.has_pending = True
         self.pending_name = index.title
-        self.replace_note = self._replace_note(index.doc_id)
+        self.replace_note = self._replace_note(index.doc_id, name)
         self._cache_estimates(index)
         self._refresh()
         # No rx.clear_selected_files here: the drop zone sends the file straight away (on_drop), so it keeps
@@ -852,6 +880,9 @@ class State(rx.State):
                 pending_path(token).unlink(missing_ok=True)
                 forget_saved_read(source)  # indexed: options can no longer change, so the saved read is done with
                 self._clear_pending(delete_files=False)
+                # Another version of this file (same name, other content) is replaced by this one, not kept beside it.
+                for older in _older_versions(store, index.doc_id, index.source_path):
+                    _remove_document(token, older)
             self._refresh()
             samples_off = False
             if not error:
@@ -884,7 +915,7 @@ class State(rx.State):
         library = self._library()
         if library.is_sample(doc_id) or not self._token():
             return
-        sessions.store(self._token()).delete_document(doc_id)
+        _remove_document(self._token(), doc_id)  # its uploaded file too, not only the index
         self._refresh()
 
     # ---- viewing sources ----

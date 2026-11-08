@@ -89,7 +89,7 @@ class Library:
         index = self.session.load_index(doc_id)
         if index.kind != "pdf" or not index.page_labels or page >= len(index.page_labels):
             return None
-        source = (self.uploads / index.source_path).resolve()
+        source = (self.uploads / doc_id / index.source_path).resolve()  # each upload in its document's folder
         if not source.is_file() or not source.is_relative_to(self.uploads.resolve()):
             return None
         if doc_id_for(source.stem, source.read_bytes()) != doc_id:
