@@ -161,3 +161,27 @@ def test_a_context_overflow_from_langchain_is_recognised():
     from langchain_google_genai.chat_models import GoogleContextOverflowError
 
     assert "too long for this model" in friendly_error(GoogleContextOverflowError(400, {"error": {"message": SECRET}}))
+
+
+def test_dev_key_prefill_only_with_an_explicit_provider_and_its_key(monkeypatch):
+    from toc_rag.config import dev_key_prefill
+
+    for name in ("TOC_RAG_PROVIDER", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY",
+                 "RAILWAY_ENVIRONMENT", "RAILWAY_ENVIRONMENT_NAME"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-dev")
+    assert dev_key_prefill() is None  # a key alone (as the CLI uses it) fills nothing in
+    monkeypatch.setenv("TOC_RAG_PROVIDER", "openai")
+    assert dev_key_prefill() is None  # the provider's own key is missing
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-dev")
+    dev = dev_key_prefill()
+    assert (dev.provider, dev.key) == ("openai", "sk-dev")
+    assert "sk-dev" not in repr(dev)
+    monkeypatch.setenv("RAILWAY_ENVIRONMENT_NAME", "production")
+    assert dev_key_prefill() is None  # never on the public server
+    monkeypatch.delenv("RAILWAY_ENVIRONMENT_NAME")
+    monkeypatch.setenv("TOC_RAG_PROVIDER", "")  # what compose passes when .env leaves it unset
+    assert dev_key_prefill() is None
+    from toc_rag.config import get_settings
+
+    assert get_settings().provider == "anthropic"

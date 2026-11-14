@@ -1,7 +1,7 @@
 """Settings, read from environment variables (and .env)."""
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -42,10 +42,33 @@ class Settings:
         return self.data_dir / "sessions"
 
 
+@dataclass(frozen=True)
+class DevKey:
+    """A provider and key from the environment, to fill the web app's key form in local dev."""
+
+    provider: str
+    key: str = field(repr=False)  # a printed DevKey never shows the key
+
+
+def dev_key_prefill() -> DevKey | None:
+    """The key to fill in for local dev (`reflex run`, `docker compose up`), or None.
+
+    Only when `TOC_RAG_PROVIDER` is set explicitly and that provider's key variable is too, and never on
+    Railway. The public server sets neither, so every visitor there brings their own key.
+    """
+    from .providers import PROVIDERS
+
+    provider = os.getenv("TOC_RAG_PROVIDER", "").strip()
+    if provider not in PROVIDERS or os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_ENVIRONMENT_NAME"):
+        return None
+    key = os.getenv(PROVIDERS[provider].key_env, "").strip()
+    return DevKey(provider, key) if key else None
+
+
 def get_settings() -> Settings:
     from .providers import PROVIDERS
 
-    provider = os.getenv("TOC_RAG_PROVIDER", "anthropic")
+    provider = os.getenv("TOC_RAG_PROVIDER", "").strip() or "anthropic"  # empty (as compose passes it) = unset
     if provider not in PROVIDERS:
         raise ValueError(f"TOC_RAG_PROVIDER must be one of {', '.join(PROVIDERS)}, not {provider!r}.")
     # No default models: the web app's visitors choose theirs; the dev CLI reads them from the environment.

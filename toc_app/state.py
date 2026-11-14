@@ -15,6 +15,7 @@ from typing import Any
 
 import reflex as rx
 from toc_rag.agent import AnswerResult, ChatTurn, Draft, Step, stream_ask
+from toc_rag.config import dev_key_prefill
 from toc_rag.errors import friendly_error
 from toc_rag.indexing import (
     DEFAULT_PRESET,
@@ -559,7 +560,10 @@ class State(rx.State):
         self._restore_pending()
         self._refresh()
         # The session timer, and click-to-enlarge for pictures, both run in the browser (set up once per page).
-        return [rx.call_script(COUNTDOWN_SCRIPT), rx.call_script(ZOOM_SCRIPT)]
+        events = [rx.call_script(COUNTDOWN_SCRIPT), rx.call_script(ZOOM_SCRIPT)]
+        if not self.key_set and dev_key_prefill() is not None:  # local dev only: never on the public server
+            events.append(State.prefill_dev_key)
+        return events
 
     @rx.event
     def end_session(self):
@@ -608,6 +612,28 @@ class State(rx.State):
             return
         self.key_checking = True
         yield
+        await self._check_key(key)
+
+    @rx.event
+    async def prefill_dev_key(self):
+        """Local dev only: fill in the provider, key and models from the environment (see `dev_key_prefill`)."""
+        dev = dev_key_prefill()
+        if dev is None or self.key_set or self.key_checking:
+            return
+        self.provider = dev.provider
+        self.key_error = ""
+        self.key_checking = True
+        yield
+        await self._check_key(dev.key)
+        if self.key_set:
+            if settings.index_model in self.models:
+                self.index_model = settings.index_model
+            if settings.agent_model in self.models:
+                self.agent_model = settings.agent_model
+
+    async def _check_key(self, key: str) -> None:
+        """Check the key by listing its models; keep it if it works. Clears `key_checking`."""
+        info = PROVIDERS[self.provider]
         try:
             # Listing the models is free, so it doubles as the key check.
             models = await asyncio.to_thread(list_models, self.provider, key)

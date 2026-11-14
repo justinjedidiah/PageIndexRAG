@@ -3,7 +3,9 @@
 #   docker compose up --build        then open http://localhost:8000 (the first start takes a minute or two)
 #   docker compose down              to stop it
 #
-# Never add API keys here: the app only uses the key each visitor enters in the page.
+# Local dev only: if .env sets TOC_RAG_PROVIDER and that provider's key, the app fills in the key form
+# (and the models, from TOC_RAG_INDEX_MODEL / TOC_RAG_AGENT_MODEL) so you don't have to. Left unset, the app
+# asks for a key as usual. The public server (Railway) builds from the Dockerfile, not this file.
 services:
   app:
     build: .
@@ -12,4 +14,10 @@ services:
       - "8000:8000"
     environment:
       PORT: "8000"
+      TOC_RAG_PROVIDER: ${TOC_RAG_PROVIDER:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      TOC_RAG_INDEX_MODEL: ${TOC_RAG_INDEX_MODEL:-}
+      TOC_RAG_AGENT_MODEL: ${TOC_RAG_AGENT_MODEL:-}
     restart: unless-stopped

@@ -3,7 +3,8 @@
 #   docker build -t toc-rag .
 #   docker run -p 8000:8000 toc-rag            # then open http://localhost:8000
 #
-# Never pass an API key to this container: the app only ever uses the key each visitor enters.
+# Never pass an API key to this container on a public host: the app must only use the key each visitor enters.
+# (compose.yaml passes the .env key for local dev, where TOC_RAG_PROVIDER makes the app fill it in.)
 # On a public host, set API_URL to the app's public address (on Railway it is filled in for you).
 
 FROM node:24-bookworm-slim AS node

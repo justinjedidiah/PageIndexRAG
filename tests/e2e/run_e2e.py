@@ -100,7 +100,10 @@ def main() -> int:
         "TOC_RAG_INDEX_MODEL": "offline-index",
         "TOC_RAG_AGENT_MODEL": "offline-agent",
     }
-    env.pop("ANTHROPIC_API_KEY", None)
+    # Empty, not removed: the app loads .env, which only fills variables that are missing. A dev key there
+    # would otherwise prefill the key form and skip the steps this run checks.
+    for name in ("TOC_RAG_PROVIDER", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY"):
+        env[name] = ""
 
     subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "build_samples.py"), "--index", "--out", str(samples)],
